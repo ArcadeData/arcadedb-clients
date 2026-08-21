@@ -35,6 +35,12 @@ jobs:
         working-directory: typescript
         run: npm ci
 
+      - name: Regenerate types and verify no drift
+        working-directory: typescript
+        run: |
+          npm run generate
+          git diff --exit-code -- packages/client/src/generated
+
       - name: Lint
         working-directory: typescript
         run: npm run lint
