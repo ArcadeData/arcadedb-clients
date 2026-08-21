@@ -48,3 +48,7 @@ jobs:
       - name: Typecheck
         working-directory: typescript
         run: npm run typecheck
+
+      - name: Test
+        working-directory: typescript
+        run: npm test
