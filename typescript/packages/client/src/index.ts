@@ -2,10 +2,13 @@ import createOpenApiClient from "openapi-fetch";
 import type { Client, Middleware } from "openapi-fetch";
 import type { components, paths } from "./generated/schema.js";
 import { ArcadeDBError } from "./errors.js";
+import { beginTransaction, commitTransaction, executeCommand, executeQuery, rollbackTransaction } from "./facade/data.js";
+import type { QueryEnvelope, QueryOptions } from "./facade/data.js";
 
 export { ArcadeDBError } from "./errors.js";
 export { basicAuth, bearerAuth } from "./auth.js";
 export type { Middleware } from "openapi-fetch";
+export type { QueryEnvelope, QueryLanguage, QueryOptions } from "./facade/data.js";
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
@@ -16,7 +19,7 @@ type RawClient = Client<paths>;
  * bridges openapi-fetch's non-throwing `{ data, error }` contract to the
  * throwing facade methods on `ArcadeDBServer`/`ArcadeDBDatabase`.
  */
-async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
   const { data, error, response } = await promise;
   if (!response.ok) {
     throw ArcadeDBError.fromResponse(response, error);
@@ -26,15 +29,51 @@ async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; response:
 
 /**
  * A single database reached through an `ArcadeDBServer`. Constructed by
- * `ArcadeDBServer.db()`; query, command, and transaction methods are added
- * to this class in later tasks.
+ * `ArcadeDBServer.db()`.
+ *
+ * When held via `transaction()`'s callback parameter, `sessionId` is set and
+ * every `query`/`command` call made through this instance carries it on the
+ * `arcadedb-session-id` header, which is what keeps those calls inside the
+ * transaction rather than auto-committing individually.
  */
 export class ArcadeDBDatabase {
   constructor(
-    /** @internal Populated by query/command/transaction methods added in later tasks. */
     private readonly client: RawClient,
     readonly name: string,
+    private readonly sessionId?: string,
   ) {}
+
+  /** Executes a read-or-write query and returns the whole result envelope - not just `result`. */
+  async query<T = unknown>(opts: QueryOptions): Promise<QueryEnvelope<T>> {
+    return executeQuery<T>(this.client, this.name, this.sessionId, opts);
+  }
+
+  /** Executes a command and returns the whole result envelope - not just `result`. */
+  async command<T = unknown>(opts: QueryOptions): Promise<QueryEnvelope<T>> {
+    return executeCommand<T>(this.client, this.name, this.sessionId, opts);
+  }
+
+  /**
+   * Runs `fn` inside a server-side transaction. `fn` is handed a database
+   * handle scoped to the transaction's session id, so every call it makes
+   * through that handle - not the outer `this` - takes part in the
+   * transaction. Commits when `fn` resolves and returns its value; rolls
+   * back and re-throws the original error when `fn` throws or rejects,
+   * synchronously or otherwise.
+   */
+  async transaction<T>(fn: (tx: ArcadeDBDatabase) => Promise<T>): Promise<T> {
+    const sessionId = await beginTransaction(this.client, this.name);
+    const tx = new ArcadeDBDatabase(this.client, this.name, sessionId);
+    let result: T;
+    try {
+      result = await fn(tx);
+    } catch (err) {
+      await rollbackTransaction(this.client, this.name, sessionId);
+      throw err;
+    }
+    await commitTransaction(this.client, this.name, sessionId);
+    return result;
+  }
 }
 
 /**
