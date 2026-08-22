@@ -12,7 +12,8 @@
     "generate": "openapi-typescript ../contracts/arcadedb-openapi-26.9.1-SNAPSHOT.json -o packages/client/src/generated/schema.d.ts",
     "typecheck": "tsc --build",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "vitest run --config e2e/vitest.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -20,6 +21,7 @@
     "esbuild": "0.28.2",
     "eslint": "10.9.0",
     "openapi-typescript": "7.13.0",
+    "testcontainers": "12.1.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.67.0",
     "vitest": "^4.1.11"
