@@ -1,8 +1,9 @@
 import { GenericContainer, Wait } from "testcontainers";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { basicAuth, bearerAuth, createClient, unwrap } from "../packages/client/src/index.js";
+import { basicAuth, bearerAuth, createClient } from "../packages/client/src/index.js";
 import type { ArcadeDBServer } from "../packages/client/src/index.js";
+import { unwrap } from "../packages/client/src/internal/unwrap.js";
 
 // Image pin: `arcadedata/arcadedb:26.8.1` is correct here even though the OpenAPI contract this
 // client is generated from is newer (26.9.1-SNAPSHOT). The upstream fixes the newer contract

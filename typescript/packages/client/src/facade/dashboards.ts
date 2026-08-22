@@ -1,6 +1,6 @@
 import type { Client } from "openapi-fetch";
 import type { components, operations, paths } from "../generated/schema.js";
-import { unwrap } from "../index.js";
+import { unwrap } from "../internal/unwrap.js";
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
@@ -22,19 +22,6 @@ export async function queryGrafana(client: RawClient, database: string, opts: Gr
       body: opts,
     }),
   );
-}
-
-/** The `db.grafana` namespace: Grafana panel queries over a time-series type. */
-export class GrafanaNamespace {
-  constructor(
-    private readonly client: RawClient,
-    private readonly database: string,
-  ) {}
-
-  /** Executes one query per `targets` entry, returning DataFrames keyed by `refId`. */
-  async query(opts: GrafanaQueryOptions): Promise<GrafanaQueryResponse> {
-    return queryGrafana(this.client, this.database, opts);
-  }
 }
 
 // ---- PromQL ----
@@ -179,32 +166,4 @@ export async function seriesPromQL(client: RawClient, database: string, opts: Pr
       params: { path: { database }, query: opts },
     }),
   );
-}
-
-/** The `db.promql` namespace: a Prometheus-compatible query surface over a time-series type. */
-export class PromQLNamespace {
-  constructor(
-    private readonly client: RawClient,
-    private readonly database: string,
-  ) {}
-
-  /** Evaluates a PromQL expression at one instant. */
-  async query(opts: PromQLQueryOptions): Promise<PromQLDataResponse> {
-    return queryPromQL(this.client, this.database, opts);
-  }
-
-  /** Evaluates a PromQL expression at every step across a range. */
-  async queryRange(opts: PromQLQueryRangeOptions): Promise<PromQLDataResponse> {
-    return queryRangePromQL(this.client, this.database, opts);
-  }
-
-  /** Lists every label name present in the database, sorted, always including `__name__`. */
-  async labels(): Promise<PromQLLabelsResponse> {
-    return labelsPromQL(this.client, this.database);
-  }
-
-  /** Returns the label sets of the series matching the given `match[]` selectors. */
-  async series(opts: PromQLSeriesOptions): Promise<PromQLSeriesResponse> {
-    return seriesPromQL(this.client, this.database, opts);
-  }
 }

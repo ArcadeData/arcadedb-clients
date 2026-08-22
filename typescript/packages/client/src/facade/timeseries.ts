@@ -1,6 +1,6 @@
 import type { Client } from "openapi-fetch";
 import type { components, paths } from "../generated/schema.js";
-import { unwrap } from "../index.js";
+import { unwrap } from "../internal/unwrap.js";
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
@@ -53,22 +53,4 @@ export async function queryTimeSeries(client: RawClient, database: string, opts:
       body: opts,
     }),
   );
-}
-
-/** The `db.ts` namespace: ingest and query samples in a time-series type. */
-export class TimeSeriesNamespace {
-  constructor(
-    private readonly client: RawClient,
-    private readonly database: string,
-  ) {}
-
-  /** Ingests samples in InfluxDB Line Protocol. */
-  async write(opts: TimeSeriesWriteOptions): Promise<void> {
-    return writeTimeSeries(this.client, this.database, opts);
-  }
-
-  /** Queries samples, optionally aggregated into buckets. */
-  async query(opts: TimeSeriesQueryOptions): Promise<TimeSeriesQueryResult> {
-    return queryTimeSeries(this.client, this.database, opts);
-  }
 }

@@ -1,7 +1,7 @@
 import type { Client } from "openapi-fetch";
 import type { components, paths } from "../generated/schema.js";
 import { ArcadeDBError } from "../errors.js";
-import { unwrap } from "../index.js";
+import { unwrap } from "../internal/unwrap.js";
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
@@ -41,13 +41,16 @@ function toEnvelope<T>(data: components["schemas"]["QueryResponse"]): QueryEnvel
 }
 
 /**
- * Builds the JSON body shared by `/query` and `/command`. `params` is typed
- * `Record<string, never>` in the generated schema (an openapi-typescript
- * artifact for "untyped object", not a real restriction), so it is cast at
- * the call site rather than here.
+ * Builds the JSON body shared by `/query` and `/command`. Only `params` is cast: it is typed
+ * `Record<string, never>` in the generated schema (an openapi-typescript artifact for "untyped
+ * object", not a real restriction), so a caller-supplied `Record<string, unknown>` needs a
+ * narrow cast to satisfy it. `command` and `language` are passed through with their real types
+ * and are NOT cast, so a contract change that renames or retypes either one still fails `tsc`
+ * here instead of only failing on the wire - that structural check is the reason this generated
+ * client exists.
  */
-function buildBody(opts: QueryOptions): { command: string; language: string; params?: Record<string, unknown> } {
-  return { command: opts.command, language: opts.language, params: opts.params };
+function buildBody(opts: QueryOptions): { command: string; language: string; params?: Record<string, never> } {
+  return { command: opts.command, language: opts.language, params: opts.params as Record<string, never> | undefined };
 }
 
 /** Attaches the session header when `sessionId` is set; omits it otherwise. */
@@ -65,7 +68,7 @@ export async function executeQuery<T = unknown>(
   const data = await unwrap(
     client.POST("/api/v1/query/{database}", {
       params: { path: { database }, header: sessionHeader(sessionId) },
-      body: buildBody(opts) as components["schemas"]["QueryRequest"],
+      body: buildBody(opts),
     }),
   );
   return toEnvelope<T>(data);
@@ -87,7 +90,7 @@ export async function executeCommand<T = unknown>(
   const data = await unwrap(
     client.POST("/api/v1/command/{database}", {
       params: { path: { database }, header: sessionHeader(sessionId) },
-      body: buildBody(opts) as components["schemas"]["CommandRequest"],
+      body: buildBody(opts),
     }),
   );
   return toEnvelope<T>(data);

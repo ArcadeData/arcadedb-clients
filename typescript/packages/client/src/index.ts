@@ -2,6 +2,7 @@ import createOpenApiClient from "openapi-fetch";
 import type { Client, Middleware } from "openapi-fetch";
 import type { components, paths } from "./generated/schema.js";
 import { ArcadeDBError } from "./errors.js";
+import { unwrap } from "./internal/unwrap.js";
 import { beginTransaction, commitTransaction, executeCommand, executeQuery, rollbackTransaction } from "./facade/data.js";
 import type { QueryEnvelope, QueryOptions } from "./facade/data.js";
 import type {
@@ -34,36 +35,27 @@ export type {
   PromQLVectorSample,
 } from "./facade/dashboards.js";
 export type { TimeSeriesQueryOptions, TimeSeriesQueryResult, TimeSeriesWriteOptions } from "./facade/timeseries.js";
+// Type-only: these classes are constructed exclusively through ArcadeDBDatabase.ts/.grafana/.promql,
+// which is what threads them the RawClient they need. Exporting the type (not the class as a
+// constructible value) lets a consumer name `db.grafana`'s type in their own code without being
+// able to `new` one directly, bypassing that plumbing.
+export type { TimeSeriesNamespace, GrafanaNamespace, PromQLNamespace };
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
 
 /**
- * Unwraps an openapi-fetch call result: returns `data` on success, throws
- * `ArcadeDBError` on any non-2xx response. This is the one place that
- * bridges openapi-fetch's non-throwing `{ data, error }` contract to the
- * throwing facade methods on `ArcadeDBServer`/`ArcadeDBDatabase`.
- */
-export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
-  const { data, error, response } = await promise;
-  if (!response.ok) {
-    throw ArcadeDBError.fromResponse(response, error);
-  }
-  return data as T;
-}
-
-/**
  * Ingests and queries samples in a time-series type - the `db.ts` namespace.
  *
  * Each method dynamically imports `facade/timeseries.js` on first call rather than `index.ts`
- * statically importing `TimeSeriesNamespace`. `db.ts`/`db.grafana`/`db.promql` are dashboard/ingest
- * namespaces, not the data plane (`query`/`command`/`transaction`); every method here was already
+ * statically importing it. `db.ts`/`db.grafana`/`db.promql` are dashboard/ingest namespaces, not
+ * the data plane (`query`/`command`/`transaction`); every method here was already
  * `Promise`-returning, so deferring the import to inside the method body is invisible to callers -
  * `db.ts` itself stays a synchronous property access, only the first call pays the import cost. This
  * is what lets a bundler that supports code-splitting keep `facade/timeseries.js` out of a chunk that
  * only reaches `query`/`command`/`transaction`; see `test/treeshake.test.ts`.
  */
-class LazyTimeSeriesNamespace {
+class TimeSeriesNamespace {
   constructor(
     private readonly client: RawClient,
     private readonly database: string,
@@ -85,9 +77,9 @@ class LazyTimeSeriesNamespace {
 /**
  * Grafana panel queries over a time-series type - the `db.grafana` namespace.
  *
- * Lazily imports `facade/dashboards.js`; see `LazyTimeSeriesNamespace`'s doc comment for why.
+ * Lazily imports `facade/dashboards.js`; see `TimeSeriesNamespace`'s doc comment for why.
  */
-class LazyGrafanaNamespace {
+class GrafanaNamespace {
   constructor(
     private readonly client: RawClient,
     private readonly database: string,
@@ -103,9 +95,9 @@ class LazyGrafanaNamespace {
 /**
  * A Prometheus-compatible query surface over a time-series type - the `db.promql` namespace.
  *
- * Lazily imports `facade/dashboards.js`; see `LazyTimeSeriesNamespace`'s doc comment for why.
+ * Lazily imports `facade/dashboards.js`; see `TimeSeriesNamespace`'s doc comment for why.
  */
-class LazyPromQLNamespace {
+class PromQLNamespace {
   constructor(
     private readonly client: RawClient,
     private readonly database: string,
@@ -146,9 +138,9 @@ class LazyPromQLNamespace {
  * transaction rather than auto-committing individually.
  */
 export class ArcadeDBDatabase {
-  private _ts: LazyTimeSeriesNamespace | undefined;
-  private _grafana: LazyGrafanaNamespace | undefined;
-  private _promql: LazyPromQLNamespace | undefined;
+  private _ts: TimeSeriesNamespace | undefined;
+  private _grafana: GrafanaNamespace | undefined;
+  private _promql: PromQLNamespace | undefined;
 
   constructor(
     private readonly client: RawClient,
@@ -156,19 +148,19 @@ export class ArcadeDBDatabase {
     private readonly sessionId?: string,
   ) {}
 
-  /** Ingests and queries samples in a time-series type. Loaded on first use; see `LazyTimeSeriesNamespace`. */
-  get ts(): LazyTimeSeriesNamespace {
-    return (this._ts ??= new LazyTimeSeriesNamespace(this.client, this.name));
+  /** Ingests and queries samples in a time-series type. Loaded on first use; see `TimeSeriesNamespace`. */
+  get ts(): TimeSeriesNamespace {
+    return (this._ts ??= new TimeSeriesNamespace(this.client, this.name));
   }
 
-  /** Grafana panel queries over a time-series type. Loaded on first use; see `LazyGrafanaNamespace`. */
-  get grafana(): LazyGrafanaNamespace {
-    return (this._grafana ??= new LazyGrafanaNamespace(this.client, this.name));
+  /** Grafana panel queries over a time-series type. Loaded on first use; see `GrafanaNamespace`. */
+  get grafana(): GrafanaNamespace {
+    return (this._grafana ??= new GrafanaNamespace(this.client, this.name));
   }
 
-  /** A Prometheus-compatible query surface over a time-series type. Loaded on first use; see `LazyPromQLNamespace`. */
-  get promql(): LazyPromQLNamespace {
-    return (this._promql ??= new LazyPromQLNamespace(this.client, this.name));
+  /** A Prometheus-compatible query surface over a time-series type. Loaded on first use; see `PromQLNamespace`. */
+  get promql(): PromQLNamespace {
+    return (this._promql ??= new PromQLNamespace(this.client, this.name));
   }
 
   /** Executes a read-or-write query and returns the whole result envelope - not just `result`. */
