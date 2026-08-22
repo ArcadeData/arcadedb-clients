@@ -93,6 +93,17 @@ jobs:
             console.log(`OK: arcadedb.serverVersion matches contract info.version (${pkgVersion})`);
           '
 
+      - name: Build the client package and verify dist/ was produced
+        working-directory: typescript
+        # npm runs "prepack" per-workspace on `npm publish`/`npm pack`, which is what actually puts
+        # dist/ in the tarball - see packages/client/package.json's "prepack" script. Running it
+        # explicitly here, ahead of the publish step, and asserting its output exists turns a
+        # silent no-op build (missing script, build that produces the wrong directory, etc.) into a
+        # hard CI failure instead of an empty published package.
+        run: |
+          npm run prepack --workspace packages/client
+          test -f packages/client/dist/index.js || (echo "packages/client/dist/index.js is missing after the build - the published package would have shipped empty" && exit 1)
+
       # Two caveats recorded here because both cost real debugging time when this workflow was set
       # up, and neither is discoverable by reading npm's docs in the moment:
       #
