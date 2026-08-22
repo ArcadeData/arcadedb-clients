@@ -59,6 +59,7 @@ jobs:
 
   e2e:
     name: End-to-end against a real server
+    needs: build
     runs-on: ubuntu-latest
     # Container pull plus ArcadeDB JVM startup can run well past what the unit job ever needs;
     # a generous, explicit cap here keeps a hung container from burning the runner's default

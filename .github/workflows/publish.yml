@@ -1,0 +1,118 @@
+name: Publish @arcadedb/client
+
+# Manual release only. Nothing in this repository publishes to npm on push, tag, or schedule - a
+# human triggers this from the Actions UI (or `gh workflow run publish.yml`) after bumping
+# typescript/packages/client/package.json's "version". This workflow is the ONLY place that talks
+# to the npm registry.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version being published. Must equal packages/client/package.json "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # npm's trusted-publisher (OIDC) flow needs a token to attest with; this is the minimum grant
+  # that provides one. See the provenance step below for the two caveats that cost real debugging
+  # time when this was set up.
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout is pinned to the same commit SHA ci.yml uses, never a mutable tag - a tag
+      # can be moved after the fact, a SHA cannot.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Verify the dispatch input matches the package version
+        working-directory: typescript
+        run: |
+          node -e '
+            const pkg = require("./packages/client/package.json");
+            const requested = process.env.REQUESTED_VERSION;
+            if (pkg.version !== requested) {
+              console.error(`Dispatch input "${requested}" does not match packages/client/package.json version "${pkg.version}". Bump the package version first, or dispatch with the correct version.`);
+              process.exit(1);
+            }
+            console.log(`OK: dispatch input matches package.json version ${pkg.version}`);
+          '
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+
+      - name: Run the full unit test suite
+        working-directory: typescript
+        run: npm test
+
+      - name: Verify the package's recorded server version matches the committed contract
+        working-directory: typescript
+        # The package records the ArcadeDB server release it was generated against in
+        # package.json's "arcadedb.serverVersion". That must still match the committed contract's
+        # "info.version" at publish time - otherwise the compatibility table this package ships in
+        # its README would be lying the moment it's published. The contract file's name carries the
+        # version, so it's located by pattern rather than hardcoded, and the check fails loudly if
+        # zero or more than one candidate is found.
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const contractsDir = path.join("..", "contracts");
+            const candidates = fs.readdirSync(contractsDir).filter((f) => f.startsWith("arcadedb-openapi-") && f.endsWith(".json"));
+            if (candidates.length !== 1) {
+              console.error(`Expected exactly one contracts/arcadedb-openapi-*.json file, found ${candidates.length}: ${candidates.join(", ")}`);
+              process.exit(1);
+            }
+            const pkg = require("./packages/client/package.json");
+            const contract = JSON.parse(fs.readFileSync(path.join(contractsDir, candidates[0]), "utf8"));
+            const pkgVersion = pkg.arcadedb && pkg.arcadedb.serverVersion;
+            const contractVersion = contract.info && contract.info.version;
+            if (!pkgVersion || !contractVersion) {
+              console.error(`Missing version field(s): package.json arcadedb.serverVersion="${pkgVersion}", contract info.version="${contractVersion}"`);
+              process.exit(1);
+            }
+            if (pkgVersion !== contractVersion) {
+              console.error(`package.json arcadedb.serverVersion ("${pkgVersion}") does not match ${candidates[0]}'"'"'s info.version ("${contractVersion}")`);
+              process.exit(1);
+            }
+            console.log(`OK: arcadedb.serverVersion matches contract info.version (${pkgVersion})`);
+          '
+
+      # Two caveats recorded here because both cost real debugging time when this workflow was set
+      # up, and neither is discoverable by reading npm's docs in the moment:
+      #
+      # 1. npm's documentation does not state whether a trusted publisher can be configured for a
+      #    package that does not yet exist on the registry - trusted-publisher configuration
+      #    attaches to an existing package. Practically: the FIRST publish of @arcadedb/client may
+      #    need a short-lived, granular-scoped npm token (set as the NPM_TOKEN secret below,
+      #    NODE_AUTH_TOKEN in the environment) to create the package at all. Once it exists, add the
+      #    trusted publisher (GitHub Actions OIDC) in npm's package settings, remove the NPM_TOKEN
+      #    secret, and every subsequent run authenticates purely via the id-token above with no
+      #    stored secret in this repository.
+      #
+      # 2. npm does NOT validate a trusted-publisher configuration when it is saved - it will accept
+      #    a workflow filename that does not exist, or that does not match this file's actual name,
+      #    with no error at configuration time. A mismatch surfaces only later, as a failed publish.
+      #    So: whenever this file is renamed, or the trusted publisher is (re)configured, check the
+      #    workflow filename entered in npm's package settings against this file's actual name
+      #    (currently `publish.yml`) once, deliberately - side by side, not from memory.
+      - name: Publish to npm with provenance
+        working-directory: typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --workspace packages/client --access public --provenance
