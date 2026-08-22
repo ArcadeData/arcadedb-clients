@@ -102,7 +102,9 @@ jobs:
         # hard CI failure instead of an empty published package.
         run: |
           npm run prepack --workspace packages/client
-          test -f packages/client/dist/index.js || (echo "packages/client/dist/index.js is missing after the build - the published package would have shipped empty" && exit 1)
+          for f in packages/client/dist/index.js packages/client/dist/index.d.ts packages/client/dist/generated/schema.js packages/client/dist/generated/schema.d.ts; do
+            test -f "$f" || (echo "$f is missing after the build - the published package would have shipped empty or broken (dist/index.d.ts imports ./generated/schema.js, which must exist alongside it)" && exit 1)
+          done
 
       # Two caveats recorded here because both cost real debugging time when this workflow was set
       # up, and neither is discoverable by reading npm's docs in the moment:

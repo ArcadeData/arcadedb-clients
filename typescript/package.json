@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "generate": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.d.ts",
+    "generate": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.ts",
     "typecheck": "tsc --build",
     "lint": "eslint .",
     "test": "vitest run",
