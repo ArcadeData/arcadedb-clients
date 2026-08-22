@@ -55,13 +55,33 @@ export interface paths {
         put?: never;
         /**
          * Send a message to the AI assistant
-         * @description Sends one message in the context of a database, optionally continuing an existing chat by 'chatId'. The server supplies the database schema and, in the richer modes, server metrics to the gateway. The reply may carry SQL commands the assistant proposes and the tool calls it made.
-         *
-         *     In the default 'auto' mode the 200 response is a 'text/event-stream', not a JSON body; the JSON response described below is returned only when 'mode' is set to something other than 'auto'.
+         * @description Sends one message in the context of a database, optionally continuing an existing chat by 'chatId'. The server embeds the database schema and server metrics in the prompt (review-first) and always answers with a single JSON body; the reply may carry SQL commands the assistant proposes. For the client-orchestrated streaming protocol instead, use POST /api/v1/ai/chat/stream.
          *
          *     The assistant is a remote dependency: 503 means the gateway was unreachable and 504 that it did not answer in time. Both are retryable. A rejected subscription token answers 502, remapped from the gateway's own 401 or 403 so it cannot be mistaken for this request's own authentication failing.
          */
         post: operations["chatWithAi"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a message to the AI assistant, streaming the reply
+         * @description Sends one message in the context of a database, optionally continuing an existing chat by 'chatId', using a client-orchestrated streaming protocol so the AI gateway never has to open an inbound connection into the caller's network: the gateway emits 'tool_call' events on the response stream, the server executes each tool locally, and posts the result back to the gateway to resume the loop. The 200 response is always 'text/event-stream', never a JSON body; the closing 'done' event carries the same 'response', 'commands', and 'chatId' fields as POST /api/v1/ai/chat's JSON response. For a single non-streaming JSON reply instead, use POST /api/v1/ai/chat.
+         *
+         *     The assistant is a remote dependency: 503 means the gateway was unreachable and 504 that it did not answer in time. Both are retryable. A rejected subscription token answers 502, remapped from the gateway's own 401 or 403 so it cannot be mistaken for this request's own authentication failing.
+         */
+        post: operations["streamChatWithAi"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1193,8 +1213,6 @@ export interface components {
             database: string;
             /** @description User message */
             message: string;
-            /** @description How the response is delivered. 'auto' (the default) streams Server-Sent Events, executing tools locally as the assistant requests them. Any other value returns a single non-streaming JSON body matching AiChatResponse. */
-            mode?: string;
             /** @description Protocol version the client speaks. Rejected with 'protocol_unsupported' when unknown. Defaults to 1 when omitted. */
             protocolVersion?: number;
         };
@@ -1383,6 +1401,11 @@ export interface components {
         CommandRequest: {
             /** @description Command to execute */
             command: string;
+            /**
+             * @description Command language
+             * @example sql
+             */
+            language: string;
             /** @description Command parameters. Values may be JSON primitives, arrays, or typed-marker objects: {"$bytes": "<base64>"} for byte[] (standard or URL-safe base64), {"$int8": [v0, v1, ...]} for byte[] from integers in [-128, 127] (used to send INT8-encoded vectors to LSM_VECTOR indexes without a float32 round-trip). */
             params?: Record<string, never>;
         };
@@ -1866,7 +1889,10 @@ export interface components {
     responses: never;
     parameters: never;
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Correlates this response with a server log line. Echoes the caller's own 'X-Request-Id' request header when present; otherwise the server generates one. Set unconditionally on every response. */
+        RequestIdHeader: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -1888,6 +1914,7 @@ export interface operations {
             /** @description Assistant activated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1897,6 +1924,7 @@ export interface operations {
             /** @description Bad request: the request body or the subscription key is missing */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1906,6 +1934,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1915,6 +1944,7 @@ export interface operations {
             /** @description Forbidden: only the root user may activate */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1924,6 +1954,7 @@ export interface operations {
             /** @description Internal server error, including a failure to reach the gateway */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1933,6 +1964,7 @@ export interface operations {
             /** @description The gateway rejected the subscription key. Its own 401 or 403 is remapped to 502 here. */
             502: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1942,6 +1974,7 @@ export interface operations {
             /** @description Passed through verbatim when the gateway itself answers 503 */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1967,6 +2000,7 @@ export interface operations {
             /** @description Analysis */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1976,6 +2010,7 @@ export interface operations {
             /** @description Bad request, or the assistant is not configured */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1985,6 +2020,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1994,6 +2030,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2003,6 +2040,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2012,6 +2050,7 @@ export interface operations {
             /** @description The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403 */
             502: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2021,6 +2060,7 @@ export interface operations {
             /** @description AI gateway unreachable, reported with code 'gateway_unreachable' */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2030,6 +2070,7 @@ export interface operations {
             /** @description AI gateway timed out, reported with code 'gateway_timeout' */
             504: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2052,19 +2093,20 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Assistant reply, as a single JSON body. Sent only when 'mode' is not 'auto' (the review-first path). In the default 'auto' mode the 200 response is instead a 'text/event-stream' of 'session', 'tool_call', 'tool_start', 'tool_end', and 'done' events; the closing 'done' event carries the same 'response', 'commands', and 'chatId' fields as this JSON body. */
+            /** @description Assistant reply, as a single JSON body. */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AiChatResponse"];
-                    "text/event-stream": string;
                 };
             };
             /** @description Bad request: the assistant is not configured, the body or a required field is missing, or the requested protocol version is unsupported. On a version mismatch the body carries 'code' set to 'protocol_unsupported' plus the versions this server accepts; the other causes carry only 'error'. */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2074,6 +2116,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2083,6 +2126,7 @@ export interface operations {
             /** @description Forbidden: the user cannot access the requested database */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2092,6 +2136,7 @@ export interface operations {
             /** @description Chat not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2101,6 +2146,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2110,6 +2156,7 @@ export interface operations {
             /** @description The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403 */
             502: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2119,6 +2166,7 @@ export interface operations {
             /** @description AI gateway unreachable, reported with code 'gateway_unreachable' */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2128,6 +2176,113 @@ export interface operations {
             /** @description AI gateway timed out, reported with code 'gateway_timeout' */
             504: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    streamChatWithAi: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Chat message */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events stream of 'session', 'tool_call', 'tool_start', 'tool_end', and 'done' events. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request: the assistant is not configured, the body or a required field is missing, or the requested protocol version is unsupported. On a version mismatch the body carries 'code' set to 'protocol_unsupported' plus the versions this server accepts; the other causes carry only 'error'. */
+            400: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProtocolError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden: the user cannot access the requested database */
+            403: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Chat not found */
+            404: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403 */
+            502: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI gateway unreachable, reported with code 'gateway_unreachable' */
+            503: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI gateway timed out, reported with code 'gateway_timeout' */
+            504: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2148,6 +2303,7 @@ export interface operations {
             /** @description Stored chats */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2157,6 +2313,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2166,6 +2323,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2175,6 +2333,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2198,6 +2357,7 @@ export interface operations {
             /** @description Chat transcript */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2207,6 +2367,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2216,6 +2377,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2225,6 +2387,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2234,6 +2397,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2262,6 +2426,7 @@ export interface operations {
             /** @description Updated chat */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2271,6 +2436,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2280,6 +2446,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2289,6 +2456,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2298,6 +2466,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2307,6 +2476,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2330,6 +2500,7 @@ export interface operations {
             /** @description Chat deleted */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2339,6 +2510,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2348,6 +2520,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2357,6 +2530,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2366,6 +2540,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2386,6 +2561,7 @@ export interface operations {
             /** @description Assistant configuration */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2395,6 +2571,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2404,6 +2581,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2413,6 +2591,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2478,6 +2657,7 @@ export interface operations {
             /** @description Load completed */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2487,6 +2667,7 @@ export interface operations {
             /** @description Client-input failure, with the counts attempted before it */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2496,6 +2677,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2505,6 +2687,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2514,6 +2697,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2523,6 +2707,7 @@ export interface operations {
             /** @description The body ended before it was fully consumed, with the counts attempted before that */
             408: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2532,6 +2717,7 @@ export interface operations {
             /** @description Concurrent modification: a page the load touched changed underneath it */
             409: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2541,6 +2727,7 @@ export interface operations {
             /** @description Request body too large */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2550,6 +2737,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2559,6 +2747,7 @@ export interface operations {
             /** @description Service unavailable: on a replicated database, no leader was reachable */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2585,6 +2774,7 @@ export interface operations {
             /** @description Transaction operation completed successfully */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     /** @description Session id identifying the transaction just opened. Present it on the 'arcadedb-session-id' request header of every subsequent call that belongs to this transaction. */
                     "arcadedb-session-id"?: string;
                     [name: string]: unknown;
@@ -2594,6 +2784,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2603,6 +2794,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2612,6 +2804,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2621,6 +2814,7 @@ export interface operations {
             /** @description A transaction is already open on this session */
             409: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2630,6 +2824,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2653,6 +2848,7 @@ export interface operations {
             /** @description Cluster status */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2662,6 +2858,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2671,6 +2868,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2680,6 +2878,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2689,6 +2888,7 @@ export interface operations {
             /** @description Service unavailable */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2709,6 +2909,7 @@ export interface operations {
             /** @description Bootstrap state */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2718,6 +2919,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2727,6 +2929,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2736,6 +2939,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2745,6 +2949,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2770,6 +2975,7 @@ export interface operations {
             /** @description Leadership transferred */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2779,6 +2985,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2788,6 +2995,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2797,6 +3005,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2806,6 +3015,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2829,6 +3039,7 @@ export interface operations {
             /** @description Leaving the cluster */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2838,6 +3049,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2847,6 +3059,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2856,6 +3069,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2865,6 +3079,7 @@ export interface operations {
             /** @description Conflict */
             409: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2874,6 +3089,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2899,6 +3115,7 @@ export interface operations {
             /** @description Peer added */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2908,6 +3125,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2917,6 +3135,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2926,6 +3145,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2935,6 +3155,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2961,6 +3182,7 @@ export interface operations {
             /** @description Peer removed */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2970,6 +3192,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2979,6 +3202,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2988,6 +3212,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2997,6 +3222,7 @@ export interface operations {
             /** @description Conflict */
             409: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3006,6 +3232,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3029,6 +3256,7 @@ export interface operations {
             /** @description Database resynced */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3038,6 +3266,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3047,6 +3276,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3056,6 +3286,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3065,6 +3296,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3074,6 +3306,7 @@ export interface operations {
             /** @description Service unavailable */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3094,6 +3327,7 @@ export interface operations {
             /** @description Step-down initiated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3103,6 +3337,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3112,6 +3347,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3121,6 +3357,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3130,6 +3367,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3153,6 +3391,7 @@ export interface operations {
             /** @description Per-file checksums */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3162,6 +3401,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3171,6 +3411,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3180,6 +3421,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3189,6 +3431,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3198,6 +3441,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3229,6 +3473,7 @@ export interface operations {
             /** @description Command executed successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3238,6 +3483,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3247,6 +3493,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3256,6 +3503,7 @@ export interface operations {
             /** @description Database not found, or the session id header names a transaction that no longer resolves ("Remote transaction session not found or expired") */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3265,6 +3513,7 @@ export interface operations {
             /** @description The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3274,6 +3523,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3300,6 +3550,7 @@ export interface operations {
             /** @description Transaction operation completed successfully */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3307,6 +3558,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3316,6 +3568,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3325,6 +3578,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3334,6 +3588,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3354,6 +3609,7 @@ export interface operations {
             /** @description List of databases retrieved successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3363,6 +3619,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3372,6 +3629,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3395,6 +3653,7 @@ export interface operations {
             /** @description Whether the database exists and is visible to the authenticated user */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3404,6 +3663,7 @@ export interface operations {
             /** @description Missing database parameter */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3413,6 +3673,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3422,6 +3683,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3445,6 +3707,7 @@ export interface operations {
             /** @description ZIP archive of the database, ending with a completeness manifest */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3454,6 +3717,7 @@ export interface operations {
             /** @description Missing or invalid database name */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3463,6 +3727,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3472,6 +3737,7 @@ export interface operations {
             /** @description Forbidden: only the root user may download a snapshot */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3481,6 +3747,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3490,6 +3757,7 @@ export interface operations {
             /** @description Too many concurrent snapshots */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3513,6 +3781,7 @@ export interface operations {
             /** @description Per-file checksums */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3522,6 +3791,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3531,6 +3801,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3540,6 +3811,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3549,6 +3821,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3558,6 +3831,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3567,6 +3841,7 @@ export interface operations {
             /** @description Service unavailable */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3587,6 +3862,7 @@ export interface operations {
             /** @description Server process and HTTP layer are up */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3605,6 +3881,7 @@ export interface operations {
             /** @description Session created */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3614,6 +3891,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3623,6 +3901,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3632,6 +3911,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3652,6 +3932,7 @@ export interface operations {
             /** @description Session invalidated */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3659,6 +3940,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3668,6 +3950,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3693,6 +3976,7 @@ export interface operations {
             /** @description JSON-RPC 2.0 response, carrying either a 'result' or an 'error' member per the JSON-RPC 2.0 envelope. A batch request answers with an array of these. */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3702,6 +3986,7 @@ export interface operations {
             /** @description Accepted, no body. The request carried only notifications and/or JSON-RPC responses, which this server never answers. */
             202: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3709,6 +3994,7 @@ export interface operations {
             /** @description Unauthorized: no credentials were supplied. Raised by the HTTP layer before the request reaches the MCP dispatcher, so the body is this API's standard error shape. */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3718,6 +4004,7 @@ export interface operations {
             /** @description Forbidden, reported as a JSON-RPC error envelope: either the request's Origin header failed the anti-DNS-rebinding check, or the authenticated user is not on the MCP server's allowedUsers list. */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3727,6 +4014,7 @@ export interface operations {
             /** @description Method not allowed, reported as a JSON-RPC error envelope. This endpoint accepts POST only. */
             405: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3736,6 +4024,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3745,6 +4034,7 @@ export interface operations {
             /** @description The MCP server is currently disabled, reported as a JSON-RPC error envelope. */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3765,6 +4055,7 @@ export interface operations {
             /** @description Current configuration */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3774,6 +4065,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3783,6 +4075,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3792,6 +4085,7 @@ export interface operations {
             /** @description Method not allowed */
             405: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3801,6 +4095,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3826,6 +4121,7 @@ export interface operations {
             /** @description Configuration after the update */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3835,6 +4131,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3844,6 +4141,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3853,6 +4151,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3862,6 +4161,7 @@ export interface operations {
             /** @description Method not allowed */
             405: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3871,6 +4171,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3894,6 +4195,7 @@ export interface operations {
             /** @description Progress snapshot */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3903,6 +4205,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3912,6 +4215,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3921,6 +4225,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3930,6 +4235,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3961,6 +4267,7 @@ export interface operations {
             /** @description Query executed successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3970,6 +4277,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3979,6 +4287,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3988,6 +4297,7 @@ export interface operations {
             /** @description Database not found, or the session id header names a transaction that no longer resolves ("Remote transaction session not found or expired") */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3997,6 +4307,7 @@ export interface operations {
             /** @description The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4006,6 +4317,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4036,6 +4348,7 @@ export interface operations {
             /** @description Query executed successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4045,6 +4358,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4054,6 +4368,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4063,6 +4378,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4072,6 +4388,7 @@ export interface operations {
             /** @description The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4081,6 +4398,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4101,6 +4419,7 @@ export interface operations {
             /** @description Server is ready to accept requests */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -4108,6 +4427,7 @@ export interface operations {
             /** @description Server is not ready: it has not finished starting, has not yet joined the Raft group, or has not caught up on replication */
             503: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -4132,6 +4452,7 @@ export interface operations {
             /** @description Transaction operation completed successfully */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -4139,6 +4460,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4148,6 +4470,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4157,6 +4480,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4166,6 +4490,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4186,6 +4511,7 @@ export interface operations {
             /** @description Server information retrieved successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4195,6 +4521,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4204,6 +4531,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4229,6 +4557,7 @@ export interface operations {
             /** @description Command executed successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4238,6 +4567,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4247,6 +4577,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4256,6 +4587,7 @@ export interface operations {
             /** @description Database not found, or the session id header names a transaction that no longer resolves ("Remote transaction session not found or expired") */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4265,6 +4597,7 @@ export interface operations {
             /** @description The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4274,6 +4607,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4294,6 +4628,7 @@ export interface operations {
             /** @description List of API tokens retrieved successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4303,6 +4638,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4312,6 +4648,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4321,6 +4658,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4330,6 +4668,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4355,6 +4694,7 @@ export interface operations {
             /** @description API token created */
             201: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4364,6 +4704,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4373,6 +4714,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4382,6 +4724,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4391,6 +4734,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4414,6 +4758,7 @@ export interface operations {
             /** @description API token deleted */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4423,6 +4768,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4432,6 +4778,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4441,6 +4788,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4450,6 +4798,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4470,6 +4819,7 @@ export interface operations {
             /** @description List of groups retrieved successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4479,6 +4829,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4488,6 +4839,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4497,6 +4849,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4506,6 +4859,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4531,6 +4885,7 @@ export interface operations {
             /** @description Group created or updated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4540,6 +4895,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4549,6 +4905,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4558,6 +4915,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4567,6 +4925,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4592,6 +4951,7 @@ export interface operations {
             /** @description Group deleted */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4601,6 +4961,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4610,6 +4971,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4619,6 +4981,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4628,6 +4991,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4648,6 +5012,7 @@ export interface operations {
             /** @description List of users retrieved successfully */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4657,6 +5022,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4666,6 +5032,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4675,6 +5042,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4684,6 +5052,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4712,6 +5081,7 @@ export interface operations {
             /** @description User updated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4721,6 +5091,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4730,6 +5101,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4739,6 +5111,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4748,6 +5121,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4773,6 +5147,7 @@ export interface operations {
             /** @description User created */
             201: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4782,6 +5157,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4791,6 +5167,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4800,6 +5177,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4809,6 +5187,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4832,6 +5211,7 @@ export interface operations {
             /** @description User deleted */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4841,6 +5221,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4850,6 +5231,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4859,6 +5241,7 @@ export interface operations {
             /** @description Forbidden - root user required */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4868,6 +5251,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4888,6 +5272,7 @@ export interface operations {
             /** @description Active sessions */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4897,6 +5282,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4906,6 +5292,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4915,6 +5302,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4938,6 +5326,7 @@ export interface operations {
             /** @description Data source reachable */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4947,6 +5336,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4956,6 +5346,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4965,6 +5356,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4974,6 +5366,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -4983,6 +5376,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5006,6 +5400,7 @@ export interface operations {
             /** @description Queryable metadata */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5015,6 +5410,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5024,6 +5420,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5033,6 +5430,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5042,6 +5440,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5051,6 +5450,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5079,6 +5479,7 @@ export interface operations {
             /** @description DataFrames keyed by target refId */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5088,6 +5489,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5097,6 +5499,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5106,6 +5509,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5115,6 +5519,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5124,6 +5529,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5152,6 +5558,7 @@ export interface operations {
             /** @description Most recent sample */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5161,6 +5568,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5170,6 +5578,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5179,6 +5588,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5188,6 +5598,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5197,6 +5608,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5222,6 +5634,7 @@ export interface operations {
             /** @description Sorted label values */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5231,6 +5644,7 @@ export interface operations {
             /** @description Bad request, in the Prometheus error envelope */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5240,6 +5654,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5249,6 +5664,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5258,6 +5674,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5267,6 +5684,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5290,6 +5708,7 @@ export interface operations {
             /** @description Sorted label names */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5299,6 +5718,7 @@ export interface operations {
             /** @description Bad request, in the Prometheus error envelope */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5308,6 +5728,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5317,6 +5738,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5326,6 +5748,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5335,6 +5758,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5365,6 +5789,7 @@ export interface operations {
             /** @description Evaluation result */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5374,6 +5799,7 @@ export interface operations {
             /** @description Bad request, in the Prometheus error envelope */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5383,6 +5809,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5392,6 +5819,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5401,6 +5829,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5410,6 +5839,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5444,6 +5874,7 @@ export interface operations {
             /** @description Evaluation result */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5453,6 +5884,7 @@ export interface operations {
             /** @description Bad request, in the Prometheus error envelope */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5462,6 +5894,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5471,6 +5904,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5480,6 +5914,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5489,6 +5924,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5519,6 +5955,7 @@ export interface operations {
             /** @description Matching series label sets */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5528,6 +5965,7 @@ export interface operations {
             /** @description Bad request, in the Prometheus error envelope */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5537,6 +5975,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5546,6 +5985,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5555,6 +5995,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5564,6 +6005,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5592,6 +6034,7 @@ export interface operations {
             /** @description Snappy-compressed protobuf ReadResponse */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5601,6 +6044,7 @@ export interface operations {
             /** @description Bad request: database parameter missing, body empty, or not Snappy-compressed */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5610,6 +6054,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5619,6 +6064,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5628,6 +6074,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5637,6 +6084,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5665,6 +6113,7 @@ export interface operations {
             /** @description Samples ingested */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -5672,6 +6121,7 @@ export interface operations {
             /** @description Bad request: database parameter missing, body empty, or not Snappy-compressed */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5681,6 +6131,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5690,6 +6141,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5699,6 +6151,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5708,6 +6161,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5736,6 +6190,7 @@ export interface operations {
             /** @description Samples, raw or aggregated according to the request */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5745,6 +6200,7 @@ export interface operations {
             /** @description Bad request */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5754,6 +6210,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5763,6 +6220,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5772,6 +6230,7 @@ export interface operations {
             /** @description Not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5781,6 +6240,7 @@ export interface operations {
             /** @description The rows or buckets exceed 'arcadedb.server.httpQueryMaxResultRows': narrow the range, widen 'bucketInterval', or page the query */
             413: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5790,6 +6250,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5821,6 +6282,7 @@ export interface operations {
             /** @description All samples ingested */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -5828,6 +6290,7 @@ export interface operations {
             /** @description Samples rejected, with the counts written and dropped */
             400: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5837,6 +6300,7 @@ export interface operations {
             /** @description Unauthorized */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5846,6 +6310,7 @@ export interface operations {
             /** @description Forbidden */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5855,6 +6320,7 @@ export interface operations {
             /** @description Database not found */
             404: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5864,6 +6330,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5884,6 +6351,7 @@ export interface operations {
             /** @description Metrics in the Prometheus text exposition format */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5893,6 +6361,7 @@ export interface operations {
             /** @description Unauthorized: returned only when the plugin requires authentication */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5902,6 +6371,7 @@ export interface operations {
             /** @description Forbidden: unsupported or malformed Authorization header */
             403: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -5911,6 +6381,7 @@ export interface operations {
             /** @description Internal server error */
             500: {
                 headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
                 };
                 content: {

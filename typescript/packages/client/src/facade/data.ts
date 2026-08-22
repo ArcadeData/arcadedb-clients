@@ -74,11 +74,9 @@ export async function executeQuery<T = unknown>(
 /**
  * Executes `POST /api/v1/command/{database}`. Returns the whole result envelope, unaltered.
  *
- * The generated `CommandRequest` schema omits `language`, but the server's
- * `PostCommandHandler` requires it (`requireStringField(requestMap, "language")`)
- * and answers 400 without it - the spec is incomplete here, not authoritative
- * about what the server accepts. `language` is sent regardless, widening the
- * generated type at the call site.
+ * `CommandRequest.language` is a required field in the generated schema,
+ * matching the server's `PostCommandHandler`, which rejects a request
+ * without it (`requireStringField(requestMap, "language")`).
  */
 export async function executeCommand<T = unknown>(
   client: RawClient,
@@ -89,7 +87,7 @@ export async function executeCommand<T = unknown>(
   const data = await unwrap(
     client.POST("/api/v1/command/{database}", {
       params: { path: { database }, header: sessionHeader(sessionId) },
-      body: buildBody(opts) as components["schemas"]["CommandRequest"] & { language: string },
+      body: buildBody(opts) as components["schemas"]["CommandRequest"],
     }),
   );
   return toEnvelope<T>(data);

@@ -1,5 +1,13 @@
 {
   "components": {
+    "headers": {
+      "RequestIdHeader": {
+        "description": "Correlates this response with a server log line. Echoes the caller's own 'X-Request-Id' request header when present; otherwise the server generates one. Set unconditionally on every response.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "AddPeerRequest": {
         "description": "Peer to add",
@@ -169,10 +177,6 @@
           },
           "message": {
             "description": "User message",
-            "type": "string"
-          },
-          "mode": {
-            "description": "How the response is delivered. 'auto' (the default) streams Server-Sent Events, executing tools locally as the assistant requests them. Any other value returns a single non-streaming JSON body matching AiChatResponse.",
             "type": "string"
           },
           "protocolVersion": {
@@ -589,13 +593,19 @@
             "description": "Command to execute",
             "type": "string"
           },
+          "language": {
+            "description": "Command language",
+            "example": "sql",
+            "type": "string"
+          },
           "params": {
             "description": "Command parameters. Values may be JSON primitives, arrays, or typed-marker objects: {\"$bytes\": \"<base64>\"} for byte[] (standard or URL-safe base64), {\"$int8\": [v0, v1, ...]} for byte[] from integers in [-128, 127] (used to send INT8-encoded vectors to LSM_VECTOR indexes without a float32 round-trip).",
             "type": "object"
           }
         },
         "required": [
-          "command"
+          "command",
+          "language"
         ],
         "type": "object"
       },
@@ -1782,7 +1792,12 @@
                 }
               }
             },
-            "description": "Assistant activated"
+            "description": "Assistant activated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -1792,7 +1807,12 @@
                 }
               }
             },
-            "description": "Bad request: the request body or the subscription key is missing"
+            "description": "Bad request: the request body or the subscription key is missing",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -1802,7 +1822,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -1812,7 +1837,12 @@
                 }
               }
             },
-            "description": "Forbidden: only the root user may activate"
+            "description": "Forbidden: only the root user may activate",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -1822,7 +1852,12 @@
                 }
               }
             },
-            "description": "Internal server error, including a failure to reach the gateway"
+            "description": "Internal server error, including a failure to reach the gateway",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "502": {
             "content": {
@@ -1832,7 +1867,12 @@
                 }
               }
             },
-            "description": "The gateway rejected the subscription key. Its own 401 or 403 is remapped to 502 here."
+            "description": "The gateway rejected the subscription key. Its own 401 or 403 is remapped to 502 here.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -1842,7 +1882,12 @@
                 }
               }
             },
-            "description": "Passed through verbatim when the gateway itself answers 503"
+            "description": "Passed through verbatim when the gateway itself answers 503",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Activate the AI assistant with a subscription key",
@@ -1875,7 +1920,12 @@
                 }
               }
             },
-            "description": "Analysis"
+            "description": "Analysis",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -1885,7 +1935,12 @@
                 }
               }
             },
-            "description": "Bad request, or the assistant is not configured"
+            "description": "Bad request, or the assistant is not configured",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -1895,7 +1950,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -1905,7 +1965,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -1915,7 +1980,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "502": {
             "content": {
@@ -1925,7 +1995,12 @@
                 }
               }
             },
-            "description": "The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403"
+            "description": "The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -1935,7 +2010,12 @@
                 }
               }
             },
-            "description": "AI gateway unreachable, reported with code 'gateway_unreachable'"
+            "description": "AI gateway unreachable, reported with code 'gateway_unreachable'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "504": {
             "content": {
@@ -1945,7 +2025,12 @@
                 }
               }
             },
-            "description": "AI gateway timed out, reported with code 'gateway_timeout'"
+            "description": "AI gateway timed out, reported with code 'gateway_timeout'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Analyse a profiler snapshot",
@@ -1956,7 +2041,7 @@
     },
     "/api/v1/ai/chat": {
       "post": {
-        "description": "Sends one message in the context of a database, optionally continuing an existing chat by 'chatId'. The server supplies the database schema and, in the richer modes, server metrics to the gateway. The reply may carry SQL commands the assistant proposes and the tool calls it made.\n\nIn the default 'auto' mode the 200 response is a 'text/event-stream', not a JSON body; the JSON response described below is returned only when 'mode' is set to something other than 'auto'.\n\nThe assistant is a remote dependency: 503 means the gateway was unreachable and 504 that it did not answer in time. Both are retryable. A rejected subscription token answers 502, remapped from the gateway's own 401 or 403 so it cannot be mistaken for this request's own authentication failing.",
+        "description": "Sends one message in the context of a database, optionally continuing an existing chat by 'chatId'. The server embeds the database schema and server metrics in the prompt (review-first) and always answers with a single JSON body; the reply may carry SQL commands the assistant proposes. For the client-orchestrated streaming protocol instead, use POST /api/v1/ai/chat/stream.\n\nThe assistant is a remote dependency: 503 means the gateway was unreachable and 504 that it did not answer in time. Both are retryable. A rejected subscription token answers 502, remapped from the gateway's own 401 or 403 so it cannot be mistaken for this request's own authentication failing.",
         "operationId": "chatWithAi",
         "requestBody": {
           "content": {
@@ -1976,15 +2061,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/AiChatResponse"
                 }
-              },
-              "text/event-stream": {
-                "schema": {
-                  "description": "Server-Sent Events stream: 'session', 'tool_call', 'tool_start', 'tool_end', 'done'",
-                  "type": "string"
-                }
               }
             },
-            "description": "Assistant reply, as a single JSON body. Sent only when 'mode' is not 'auto' (the review-first path). In the default 'auto' mode the 200 response is instead a 'text/event-stream' of 'session', 'tool_call', 'tool_start', 'tool_end', and 'done' events; the closing 'done' event carries the same 'response', 'commands', and 'chatId' fields as this JSON body."
+            "description": "Assistant reply, as a single JSON body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -1994,7 +2078,12 @@
                 }
               }
             },
-            "description": "Bad request: the assistant is not configured, the body or a required field is missing, or the requested protocol version is unsupported. On a version mismatch the body carries 'code' set to 'protocol_unsupported' plus the versions this server accepts; the other causes carry only 'error'."
+            "description": "Bad request: the assistant is not configured, the body or a required field is missing, or the requested protocol version is unsupported. On a version mismatch the body carries 'code' set to 'protocol_unsupported' plus the versions this server accepts; the other causes carry only 'error'.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2004,7 +2093,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2014,7 +2108,12 @@
                 }
               }
             },
-            "description": "Forbidden: the user cannot access the requested database"
+            "description": "Forbidden: the user cannot access the requested database",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2024,7 +2123,12 @@
                 }
               }
             },
-            "description": "Chat not found"
+            "description": "Chat not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2034,7 +2138,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "502": {
             "content": {
@@ -2044,7 +2153,12 @@
                 }
               }
             },
-            "description": "The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403"
+            "description": "The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -2054,7 +2168,12 @@
                 }
               }
             },
-            "description": "AI gateway unreachable, reported with code 'gateway_unreachable'"
+            "description": "AI gateway unreachable, reported with code 'gateway_unreachable'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "504": {
             "content": {
@@ -2064,10 +2183,174 @@
                 }
               }
             },
-            "description": "AI gateway timed out, reported with code 'gateway_timeout'"
+            "description": "AI gateway timed out, reported with code 'gateway_timeout'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Send a message to the AI assistant",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/v1/ai/chat/stream": {
+      "post": {
+        "description": "Sends one message in the context of a database, optionally continuing an existing chat by 'chatId', using a client-orchestrated streaming protocol so the AI gateway never has to open an inbound connection into the caller's network: the gateway emits 'tool_call' events on the response stream, the server executes each tool locally, and posts the result back to the gateway to resume the loop. The 200 response is always 'text/event-stream', never a JSON body; the closing 'done' event carries the same 'response', 'commands', and 'chatId' fields as POST /api/v1/ai/chat's JSON response. For a single non-streaming JSON reply instead, use POST /api/v1/ai/chat.\n\nThe assistant is a remote dependency: 503 means the gateway was unreachable and 504 that it did not answer in time. Both are retryable. A rejected subscription token answers 502, remapped from the gateway's own 401 or 403 so it cannot be mistaken for this request's own authentication failing.",
+        "operationId": "streamChatWithAi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiChatRequest"
+              }
+            }
+          },
+          "description": "Chat message",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "Server-Sent Events stream: 'session', 'tool_call', 'tool_start', 'tool_end', 'done'",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-Sent Events stream of 'session', 'tool_call', 'tool_start', 'tool_end', and 'done' events.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProtocolError"
+                }
+              }
+            },
+            "description": "Bad request: the assistant is not configured, the body or a required field is missing, or the requested protocol version is unsupported. On a version mismatch the body carries 'code' set to 'protocol_unsupported' plus the versions this server accepts; the other causes carry only 'error'.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden: the user cannot access the requested database",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Chat not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The gateway rejected the stored subscription token; remapped from the gateway's own 401 or 403",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "AI gateway unreachable, reported with code 'gateway_unreachable'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "AI gateway timed out, reported with code 'gateway_timeout'",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          }
+        },
+        "summary": "Send a message to the AI assistant, streaming the reply",
         "tags": [
           "AI"
         ]
@@ -2086,7 +2369,12 @@
                 }
               }
             },
-            "description": "Stored chats"
+            "description": "Stored chats",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2096,7 +2384,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2106,7 +2399,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2116,7 +2414,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List stored chats",
@@ -2149,7 +2452,12 @@
                 }
               }
             },
-            "description": "Chat deleted"
+            "description": "Chat deleted",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2159,7 +2467,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2169,7 +2482,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2179,7 +2497,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2189,7 +2512,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Delete a stored chat",
@@ -2220,7 +2548,12 @@
                 }
               }
             },
-            "description": "Chat transcript"
+            "description": "Chat transcript",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2230,7 +2563,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2240,7 +2578,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2250,7 +2593,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2260,7 +2608,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read one stored chat",
@@ -2302,7 +2655,12 @@
                 }
               }
             },
-            "description": "Updated chat"
+            "description": "Updated chat",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -2312,7 +2670,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2322,7 +2685,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2332,7 +2700,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2342,7 +2715,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2352,7 +2730,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Replace the messages of a stored chat",
@@ -2374,7 +2757,12 @@
                 }
               }
             },
-            "description": "Assistant configuration"
+            "description": "Assistant configuration",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2384,7 +2772,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2394,7 +2787,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2404,7 +2802,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read the AI assistant configuration",
@@ -2623,7 +3026,12 @@
                 }
               }
             },
-            "description": "Load completed"
+            "description": "Load completed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -2633,7 +3041,12 @@
                 }
               }
             },
-            "description": "Client-input failure, with the counts attempted before it"
+            "description": "Client-input failure, with the counts attempted before it",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2643,7 +3056,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2653,7 +3071,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2663,7 +3086,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "408": {
             "content": {
@@ -2673,7 +3101,12 @@
                 }
               }
             },
-            "description": "The body ended before it was fully consumed, with the counts attempted before that"
+            "description": "The body ended before it was fully consumed, with the counts attempted before that",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "409": {
             "content": {
@@ -2683,7 +3116,12 @@
                 }
               }
             },
-            "description": "Concurrent modification: a page the load touched changed underneath it"
+            "description": "Concurrent modification: a page the load touched changed underneath it",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -2693,7 +3131,12 @@
                 }
               }
             },
-            "description": "Request body too large"
+            "description": "Request body too large",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2703,7 +3146,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -2713,7 +3161,12 @@
                 }
               }
             },
-            "description": "Service unavailable: on a replicated database, no leader was reachable"
+            "description": "Service unavailable: on a replicated database, no leader was reachable",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Bulk-load vertices and edges",
@@ -2750,6 +3203,9 @@
           "204": {
             "description": "Transaction operation completed successfully",
             "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              },
               "arcadedb-session-id": {
                 "description": "Session id identifying the transaction just opened. Present it on the 'arcadedb-session-id' request header of every subsequent call that belongs to this transaction.",
                 "schema": {
@@ -2766,7 +3222,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2776,7 +3237,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -2786,7 +3252,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "409": {
             "content": {
@@ -2796,7 +3267,12 @@
                 }
               }
             },
-            "description": "A transaction is already open on this session"
+            "description": "A transaction is already open on this session",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2806,7 +3282,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Begin transaction",
@@ -2839,7 +3320,12 @@
                 }
               }
             },
-            "description": "Cluster status"
+            "description": "Cluster status",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2849,7 +3335,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2859,7 +3350,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2869,7 +3365,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -2879,7 +3380,12 @@
                 }
               }
             },
-            "description": "Service unavailable"
+            "description": "Service unavailable",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read cluster and replication status",
@@ -2901,7 +3407,12 @@
                 }
               }
             },
-            "description": "Bootstrap state"
+            "description": "Bootstrap state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -2911,7 +3422,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2921,7 +3437,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -2931,7 +3452,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -2941,7 +3467,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Report per-database bootstrap state",
@@ -2974,7 +3505,12 @@
                 }
               }
             },
-            "description": "Leadership transferred"
+            "description": "Leadership transferred",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -2984,7 +3520,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -2994,7 +3535,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3004,7 +3550,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3014,7 +3565,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Transfer leadership",
@@ -3047,7 +3603,12 @@
                 }
               }
             },
-            "description": "Leaving the cluster"
+            "description": "Leaving the cluster",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3057,7 +3618,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3067,7 +3633,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3077,7 +3648,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "409": {
             "content": {
@@ -3087,7 +3663,12 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "Conflict",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3097,7 +3678,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Leave the cluster",
@@ -3130,7 +3716,12 @@
                 }
               }
             },
-            "description": "Peer added"
+            "description": "Peer added",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3140,7 +3731,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3150,7 +3746,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3160,7 +3761,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3170,7 +3776,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Add a peer to the cluster",
@@ -3212,7 +3823,12 @@
                 }
               }
             },
-            "description": "Peer removed"
+            "description": "Peer removed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3222,7 +3838,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3232,7 +3853,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3242,7 +3868,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "409": {
             "content": {
@@ -3252,7 +3883,12 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "Conflict",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3262,7 +3898,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Remove a peer from the cluster",
@@ -3295,7 +3936,12 @@
                 }
               }
             },
-            "description": "Database resynced"
+            "description": "Database resynced",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3305,7 +3951,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3315,7 +3966,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3325,7 +3981,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3335,7 +3996,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -3345,7 +4011,12 @@
                 }
               }
             },
-            "description": "Service unavailable"
+            "description": "Service unavailable",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Re-fetch a database from the leader",
@@ -3367,7 +4038,12 @@
                 }
               }
             },
-            "description": "Step-down initiated"
+            "description": "Step-down initiated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3377,7 +4053,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3387,7 +4068,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3397,7 +4083,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3407,7 +4098,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Step down from leadership",
@@ -3440,7 +4136,12 @@
                 }
               }
             },
-            "description": "Per-file checksums"
+            "description": "Per-file checksums",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3450,7 +4151,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3460,7 +4166,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3470,7 +4181,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -3480,7 +4196,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3490,7 +4211,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Checksum a database's files for comparison across peers",
@@ -3543,7 +4269,12 @@
                 }
               }
             },
-            "description": "Command executed successfully"
+            "description": "Command executed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3553,7 +4284,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3563,7 +4299,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -3573,7 +4314,12 @@
                 }
               }
             },
-            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")"
+            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -3583,7 +4329,12 @@
                 }
               }
             },
-            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command"
+            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3593,7 +4344,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Execute command",
@@ -3628,7 +4384,12 @@
         ],
         "responses": {
           "204": {
-            "description": "Transaction operation completed successfully"
+            "description": "Transaction operation completed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3638,7 +4399,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3648,7 +4414,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -3658,7 +4429,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3668,7 +4444,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Commit transaction",
@@ -3690,7 +4471,12 @@
                 }
               }
             },
-            "description": "List of databases retrieved successfully"
+            "description": "List of databases retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3700,7 +4486,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3710,7 +4501,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List databases",
@@ -3743,7 +4539,12 @@
                 }
               }
             },
-            "description": "Whether the database exists and is visible to the authenticated user"
+            "description": "Whether the database exists and is visible to the authenticated user",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3753,7 +4554,12 @@
                 }
               }
             },
-            "description": "Missing database parameter"
+            "description": "Missing database parameter",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3763,7 +4569,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3773,7 +4584,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Check database existence",
@@ -3807,7 +4623,12 @@
                 }
               }
             },
-            "description": "ZIP archive of the database, ending with a completeness manifest"
+            "description": "ZIP archive of the database, ending with a completeness manifest",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3817,7 +4638,12 @@
                 }
               }
             },
-            "description": "Missing or invalid database name"
+            "description": "Missing or invalid database name",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3827,7 +4653,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3837,7 +4668,12 @@
                 }
               }
             },
-            "description": "Forbidden: only the root user may download a snapshot"
+            "description": "Forbidden: only the root user may download a snapshot",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -3847,7 +4683,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -3857,7 +4698,12 @@
                 }
               }
             },
-            "description": "Too many concurrent snapshots"
+            "description": "Too many concurrent snapshots",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "security": [
@@ -3895,7 +4741,12 @@
                 }
               }
             },
-            "description": "Per-file checksums"
+            "description": "Per-file checksums",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -3905,7 +4756,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -3915,7 +4771,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -3925,7 +4786,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -3935,7 +4801,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -3945,7 +4816,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -3955,7 +4831,12 @@
                 }
               }
             },
-            "description": "Service unavailable"
+            "description": "Service unavailable",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "security": [
@@ -3975,7 +4856,12 @@
         "operationId": "checkHealth",
         "responses": {
           "204": {
-            "description": "Server process and HTTP layer are up"
+            "description": "Server process and HTTP layer are up",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "security": [],
@@ -3998,7 +4884,12 @@
                 }
               }
             },
-            "description": "Session created"
+            "description": "Session created",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4008,7 +4899,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4018,7 +4914,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4028,7 +4929,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Create an authentication session",
@@ -4043,7 +4949,12 @@
         "operationId": "logout",
         "responses": {
           "204": {
-            "description": "Session invalidated"
+            "description": "Session invalidated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4053,7 +4964,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4063,7 +4979,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Invalidate the current authentication session",
@@ -4096,10 +5017,20 @@
                 }
               }
             },
-            "description": "JSON-RPC 2.0 response, carrying either a 'result' or an 'error' member per the JSON-RPC 2.0 envelope. A batch request answers with an array of these."
+            "description": "JSON-RPC 2.0 response, carrying either a 'result' or an 'error' member per the JSON-RPC 2.0 envelope. A batch request answers with an array of these.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "202": {
-            "description": "Accepted, no body. The request carried only notifications and/or JSON-RPC responses, which this server never answers."
+            "description": "Accepted, no body. The request carried only notifications and/or JSON-RPC responses, which this server never answers.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4109,7 +5040,12 @@
                 }
               }
             },
-            "description": "Unauthorized: no credentials were supplied. Raised by the HTTP layer before the request reaches the MCP dispatcher, so the body is this API's standard error shape."
+            "description": "Unauthorized: no credentials were supplied. Raised by the HTTP layer before the request reaches the MCP dispatcher, so the body is this API's standard error shape.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4119,7 +5055,12 @@
                 }
               }
             },
-            "description": "Forbidden, reported as a JSON-RPC error envelope: either the request's Origin header failed the anti-DNS-rebinding check, or the authenticated user is not on the MCP server's allowedUsers list."
+            "description": "Forbidden, reported as a JSON-RPC error envelope: either the request's Origin header failed the anti-DNS-rebinding check, or the authenticated user is not on the MCP server's allowedUsers list.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "405": {
             "content": {
@@ -4129,7 +5070,12 @@
                 }
               }
             },
-            "description": "Method not allowed, reported as a JSON-RPC error envelope. This endpoint accepts POST only."
+            "description": "Method not allowed, reported as a JSON-RPC error envelope. This endpoint accepts POST only.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4139,7 +5085,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
             "content": {
@@ -4149,7 +5100,12 @@
                 }
               }
             },
-            "description": "The MCP server is currently disabled, reported as a JSON-RPC error envelope."
+            "description": "The MCP server is currently disabled, reported as a JSON-RPC error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Exchange a JSON-RPC message with the MCP server",
@@ -4171,7 +5127,12 @@
                 }
               }
             },
-            "description": "Current configuration"
+            "description": "Current configuration",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4181,7 +5142,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4191,7 +5157,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "405": {
             "content": {
@@ -4201,7 +5172,12 @@
                 }
               }
             },
-            "description": "Method not allowed"
+            "description": "Method not allowed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4211,7 +5187,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read the MCP server configuration",
@@ -4242,7 +5223,12 @@
                 }
               }
             },
-            "description": "Configuration after the update"
+            "description": "Configuration after the update",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4252,7 +5238,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4262,7 +5253,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4272,7 +5268,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "405": {
             "content": {
@@ -4282,7 +5283,12 @@
                 }
               }
             },
-            "description": "Method not allowed"
+            "description": "Method not allowed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4292,7 +5298,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Update the MCP server configuration",
@@ -4325,7 +5336,12 @@
                 }
               }
             },
-            "description": "Progress snapshot"
+            "description": "Progress snapshot",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4335,7 +5351,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4345,7 +5366,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4355,7 +5381,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4365,7 +5396,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List in-progress maintenance operations",
@@ -4418,7 +5454,12 @@
                 }
               }
             },
-            "description": "Query executed successfully"
+            "description": "Query executed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4428,7 +5469,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4438,7 +5484,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -4448,7 +5499,12 @@
                 }
               }
             },
-            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")"
+            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -4458,7 +5514,12 @@
                 }
               }
             },
-            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query"
+            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4468,7 +5529,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Execute query via POST",
@@ -4535,7 +5601,12 @@
                 }
               }
             },
-            "description": "Query executed successfully"
+            "description": "Query executed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4545,7 +5616,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4555,7 +5631,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -4565,7 +5646,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -4575,7 +5661,12 @@
                 }
               }
             },
-            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query"
+            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the query",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4585,7 +5676,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Execute query via GET",
@@ -4600,10 +5696,20 @@
         "operationId": "checkReady",
         "responses": {
           "204": {
-            "description": "Server is ready to accept requests"
+            "description": "Server is ready to accept requests",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "503": {
-            "description": "Server is not ready: it has not finished starting, has not yet joined the Raft group, or has not caught up on replication"
+            "description": "Server is not ready: it has not finished starting, has not yet joined the Raft group, or has not caught up on replication",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "security": [],
@@ -4639,7 +5745,12 @@
         ],
         "responses": {
           "204": {
-            "description": "Transaction operation completed successfully"
+            "description": "Transaction operation completed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4649,7 +5760,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4659,7 +5775,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -4669,7 +5790,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4679,7 +5805,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Rollback transaction",
@@ -4701,7 +5832,12 @@
                 }
               }
             },
-            "description": "Server information retrieved successfully"
+            "description": "Server information retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4711,7 +5847,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4721,7 +5862,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Get server information",
@@ -4752,7 +5898,12 @@
                 }
               }
             },
-            "description": "Command executed successfully"
+            "description": "Command executed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4762,7 +5913,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4772,7 +5928,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -4782,7 +5943,12 @@
                 }
               }
             },
-            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")"
+            "description": "Database not found, or the session id header names a transaction that no longer resolves (\"Remote transaction session not found or expired\")",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -4792,7 +5958,12 @@
                 }
               }
             },
-            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command"
+            "description": "The result exceeds 'arcadedb.server.httpQueryMaxResultRows': narrow or page the command",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4802,7 +5973,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Execute server command",
@@ -4835,7 +6011,12 @@
                 }
               }
             },
-            "description": "API token deleted"
+            "description": "API token deleted",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4845,7 +6026,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4855,7 +6041,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4865,7 +6056,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4875,7 +6071,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Delete API token",
@@ -4895,7 +6096,12 @@
                 }
               }
             },
-            "description": "List of API tokens retrieved successfully"
+            "description": "List of API tokens retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4905,7 +6111,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4915,7 +6126,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4925,7 +6141,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -4935,7 +6156,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List API tokens",
@@ -4966,7 +6192,12 @@
                 }
               }
             },
-            "description": "API token created"
+            "description": "API token created",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -4976,7 +6207,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -4986,7 +6222,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -4996,7 +6237,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5006,7 +6252,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Create API token",
@@ -5048,7 +6299,12 @@
                 }
               }
             },
-            "description": "Group deleted"
+            "description": "Group deleted",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5058,7 +6314,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5068,7 +6329,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5078,7 +6344,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5088,7 +6359,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Delete group",
@@ -5108,7 +6384,12 @@
                 }
               }
             },
-            "description": "List of groups retrieved successfully"
+            "description": "List of groups retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5118,7 +6399,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5128,7 +6414,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5138,7 +6429,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5148,7 +6444,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List groups",
@@ -5179,7 +6480,12 @@
                 }
               }
             },
-            "description": "Group created or updated"
+            "description": "Group created or updated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5189,7 +6495,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5199,7 +6510,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5209,7 +6525,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5219,7 +6540,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Create or update group",
@@ -5252,7 +6578,12 @@
                 }
               }
             },
-            "description": "User deleted"
+            "description": "User deleted",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5262,7 +6593,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5272,7 +6608,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5282,7 +6623,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5292,7 +6638,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Delete user",
@@ -5312,7 +6663,12 @@
                 }
               }
             },
-            "description": "List of users retrieved successfully"
+            "description": "List of users retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5322,7 +6678,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5332,7 +6693,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5342,7 +6708,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5352,7 +6723,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List users",
@@ -5383,7 +6759,12 @@
                 }
               }
             },
-            "description": "User created"
+            "description": "User created",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5393,7 +6774,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5403,7 +6789,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5413,7 +6804,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5423,7 +6819,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Create user",
@@ -5465,7 +6866,12 @@
                 }
               }
             },
-            "description": "User updated"
+            "description": "User updated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5475,7 +6881,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5485,7 +6896,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5495,7 +6911,12 @@
                 }
               }
             },
-            "description": "Forbidden - root user required"
+            "description": "Forbidden - root user required",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5505,7 +6926,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Update user",
@@ -5527,7 +6953,12 @@
                 }
               }
             },
-            "description": "Active sessions"
+            "description": "Active sessions",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5537,7 +6968,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5547,7 +6983,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5557,7 +6998,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List active authentication sessions",
@@ -5590,7 +7036,12 @@
                 }
               }
             },
-            "description": "Data source reachable"
+            "description": "Data source reachable",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5600,7 +7051,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5610,7 +7066,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5620,7 +7081,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -5630,7 +7096,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5640,7 +7111,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Test the data source connection",
@@ -5673,7 +7149,12 @@
                 }
               }
             },
-            "description": "Queryable metadata"
+            "description": "Queryable metadata",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5683,7 +7164,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5693,7 +7179,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5703,7 +7194,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -5713,7 +7209,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5723,7 +7224,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List queryable types, fields, and tags",
@@ -5767,7 +7273,12 @@
                 }
               }
             },
-            "description": "DataFrames keyed by target refId"
+            "description": "DataFrames keyed by target refId",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5777,7 +7288,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5787,7 +7303,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5797,7 +7318,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -5807,7 +7333,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5817,7 +7348,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Execute panel queries and return DataFrames",
@@ -5868,7 +7404,12 @@
                 }
               }
             },
-            "description": "Most recent sample"
+            "description": "Most recent sample",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5878,7 +7419,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5888,7 +7434,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5898,7 +7449,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -5908,7 +7464,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -5918,7 +7479,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read the most recent sample of a series",
@@ -5960,7 +7526,12 @@
                 }
               }
             },
-            "description": "Sorted label values"
+            "description": "Sorted label values",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -5970,7 +7541,12 @@
                 }
               }
             },
-            "description": "Bad request, in the Prometheus error envelope"
+            "description": "Bad request, in the Prometheus error envelope",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -5980,7 +7556,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -5990,7 +7571,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6000,7 +7586,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6010,7 +7601,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List the values of one label",
@@ -6043,7 +7639,12 @@
                 }
               }
             },
-            "description": "Sorted label names"
+            "description": "Sorted label names",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6053,7 +7654,12 @@
                 }
               }
             },
-            "description": "Bad request, in the Prometheus error envelope"
+            "description": "Bad request, in the Prometheus error envelope",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6063,7 +7669,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6073,7 +7684,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6083,7 +7699,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6093,7 +7714,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "List label names",
@@ -6153,7 +7779,12 @@
                 }
               }
             },
-            "description": "Evaluation result"
+            "description": "Evaluation result",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6163,7 +7794,12 @@
                 }
               }
             },
-            "description": "Bad request, in the Prometheus error envelope"
+            "description": "Bad request, in the Prometheus error envelope",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6173,7 +7809,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6183,7 +7824,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6193,7 +7839,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6203,7 +7854,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Evaluate a PromQL expression at a single instant",
@@ -6281,7 +7937,12 @@
                 }
               }
             },
-            "description": "Evaluation result"
+            "description": "Evaluation result",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6291,7 +7952,12 @@
                 }
               }
             },
-            "description": "Bad request, in the Prometheus error envelope"
+            "description": "Bad request, in the Prometheus error envelope",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6301,7 +7967,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6311,7 +7982,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6321,7 +7997,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6331,7 +8012,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Evaluate a PromQL expression over a time range",
@@ -6396,7 +8082,12 @@
                 }
               }
             },
-            "description": "Matching series label sets"
+            "description": "Matching series label sets",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6406,7 +8097,12 @@
                 }
               }
             },
-            "description": "Bad request, in the Prometheus error envelope"
+            "description": "Bad request, in the Prometheus error envelope",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6416,7 +8112,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6426,7 +8127,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6436,7 +8142,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6446,7 +8157,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Find series matching selectors",
@@ -6492,7 +8208,12 @@
                 }
               }
             },
-            "description": "Snappy-compressed protobuf ReadResponse"
+            "description": "Snappy-compressed protobuf ReadResponse",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6502,7 +8223,12 @@
                 }
               }
             },
-            "description": "Bad request: database parameter missing, body empty, or not Snappy-compressed"
+            "description": "Bad request: database parameter missing, body empty, or not Snappy-compressed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6512,7 +8238,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6522,7 +8253,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6532,7 +8268,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6542,7 +8283,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Read samples through Prometheus remote read",
@@ -6580,7 +8326,12 @@
         },
         "responses": {
           "204": {
-            "description": "Samples ingested"
+            "description": "Samples ingested",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6590,7 +8341,12 @@
                 }
               }
             },
-            "description": "Bad request: database parameter missing, body empty, or not Snappy-compressed"
+            "description": "Bad request: database parameter missing, body empty, or not Snappy-compressed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6600,7 +8356,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6610,7 +8371,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6620,7 +8386,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6630,7 +8401,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Ingest samples through Prometheus remote write",
@@ -6681,7 +8457,12 @@
                 }
               }
             },
-            "description": "Samples, raw or aggregated according to the request"
+            "description": "Samples, raw or aggregated according to the request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6691,7 +8472,12 @@
                 }
               }
             },
-            "description": "Bad request"
+            "description": "Bad request",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6701,7 +8487,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6711,7 +8502,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6721,7 +8517,12 @@
                 }
               }
             },
-            "description": "Not found"
+            "description": "Not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "413": {
             "content": {
@@ -6731,7 +8532,12 @@
                 }
               }
             },
-            "description": "The rows or buckets exceed 'arcadedb.server.httpQueryMaxResultRows': narrow the range, widen 'bucketInterval', or page the query"
+            "description": "The rows or buckets exceed 'arcadedb.server.httpQueryMaxResultRows': narrow the range, widen 'bucketInterval', or page the query",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6741,7 +8547,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Query samples, optionally aggregated into buckets",
@@ -6793,7 +8604,12 @@
         },
         "responses": {
           "204": {
-            "description": "All samples ingested"
+            "description": "All samples ingested",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "400": {
             "content": {
@@ -6803,7 +8619,12 @@
                 }
               }
             },
-            "description": "Samples rejected, with the counts written and dropped"
+            "description": "Samples rejected, with the counts written and dropped",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6813,7 +8634,12 @@
                 }
               }
             },
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6823,7 +8649,12 @@
                 }
               }
             },
-            "description": "Forbidden"
+            "description": "Forbidden",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "404": {
             "content": {
@@ -6833,7 +8664,12 @@
                 }
               }
             },
-            "description": "Database not found"
+            "description": "Database not found",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6843,7 +8679,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Ingest samples in InfluxDB Line Protocol",
@@ -6866,7 +8707,12 @@
                 }
               }
             },
-            "description": "Metrics in the Prometheus text exposition format"
+            "description": "Metrics in the Prometheus text exposition format",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "401": {
             "content": {
@@ -6876,7 +8722,12 @@
                 }
               }
             },
-            "description": "Unauthorized: returned only when the plugin requires authentication"
+            "description": "Unauthorized: returned only when the plugin requires authentication",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "403": {
             "content": {
@@ -6886,7 +8737,12 @@
                 }
               }
             },
-            "description": "Forbidden: unsupported or malformed Authorization header"
+            "description": "Forbidden: unsupported or malformed Authorization header",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           },
           "500": {
             "content": {
@@ -6896,7 +8752,12 @@
                 }
               }
             },
-            "description": "Internal server error"
+            "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
           }
         },
         "summary": "Scrape server metrics",
