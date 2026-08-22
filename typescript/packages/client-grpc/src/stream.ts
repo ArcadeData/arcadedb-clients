@@ -91,11 +91,20 @@ async function* envelopeChunks(request: InsertStreamRequest, sessionId: string):
   for (;;) {
     const next = await iterator.next();
     const isLast = next.done === true;
+    const isFirst = chunkSeq === 1n;
 
     yield {
-      ...(chunkSeq === 1n ? { database: request.database } : {}),
+      ...(isFirst ? { database: request.database } : {}),
       credentials: request.credentials,
-      options: request.options,
+      // Empirically verified against a real server (task 6 of the M1B plan): `InsertContext` on
+      // the server builds itself from `InsertOptions.database` only - `InsertChunk.database` (set
+      // above, and documented in arcadedb-server.proto as REQUIRED on the first chunk, cached by
+      // the server for the rest of the stream) is never read by `ArcadeDbGrpcService#insertStream`.
+      // Without this, every stream fails on the deferred commit with "Invalid database name: name
+      // is required", even though `database` was sent correctly per the .proto contract. Until
+      // that server-side gap is closed, mirror `database` into `options.database` on the first
+      // chunk too, so this wrapper works against the server as it actually behaves today.
+      options: isFirst ? { ...request.options, database: request.database } : request.options,
       transaction: request.transaction,
       sessionId,
       chunkSeq,

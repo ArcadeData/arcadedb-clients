@@ -142,6 +142,26 @@ describe("insertStream", () => {
     expect(sent[2]?.database).toBeUndefined();
   });
 
+  it("mirrors database into options.database on the first chunk only, working around a server-side gap", async () => {
+    // Regression test for a real-server finding (task 6 of the M1B plan): `ArcadeDbGrpcService
+    // #insertStream` builds its `InsertContext` from `InsertOptions.database` only and never
+    // reads `InsertChunk.database`, even though the .proto contract documents the latter as
+    // REQUIRED on the first chunk. Without mirroring `database` into `options.database`, every
+    // real stream fails at the deferred commit with "Invalid database name: name is required".
+    const { raw, sent } = mockRaw(insertSummary());
+    const insertStream = createInsertStream(raw);
+
+    await insertStream({ database: "mydb", options: { targetClass: "Person" }, chunks: rowBatches() });
+
+    expect(sent[0]?.options?.database).toBe("mydb");
+    // The caller's other options survive the merge.
+    expect(sent[0]?.options?.targetClass).toBe("Person");
+    // Subsequent chunks are untouched: no invented database, and the caller's options (or lack
+    // thereof) pass through as given rather than being forced to repeat `database`.
+    expect(sent[1]?.options?.database).toBeUndefined();
+    expect(sent[1]?.options?.targetClass).toBe("Person");
+  });
+
   it("marks only the final chunk as last", async () => {
     const { raw, sent } = mockRaw(insertSummary());
     const insertStream = createInsertStream(raw);
