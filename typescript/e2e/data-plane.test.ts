@@ -17,7 +17,19 @@ import { unwrap } from "../packages/client/src/internal/unwrap.js";
 // DO NOT GENERALISE THIS. It holds only because this particular contract bump was a
 // documentation fix. The moment a contract bump reflects a real wire change, this pin must move
 // with it.
-const ARCADEDB_IMAGE = "arcadedata/arcadedb:26.8.1";
+const DEFAULT_ARCADEDB_IMAGE = "arcadedata/arcadedb:26.8.1";
+
+// `ARCADEDB_DOCKER_IMAGE` overrides the pin. It exists for the smoke job in ArcadeData/arcadedb,
+// which runs this suite against the image built from the server commit under review rather than
+// against a published tag. That is the only check that catches a payload-shape change on the PR
+// that introduces one: the anti-drift test there (ArcadeData/arcadedb#4896) compares registered
+// ROUTES, so it is blind to a request-body schema or a header that stops matching the handler.
+//
+// The variable name matches the one ArcadeDB's own `e2e-js` suite already uses, so the two
+// harnesses are driven the same way.
+//
+// Locally and in this repository's CI the variable is unset, and the pin above applies.
+const ARCADEDB_IMAGE = process.env.ARCADEDB_DOCKER_IMAGE ?? DEFAULT_ARCADEDB_IMAGE;
 
 const ROOT_PASSWORD = "playwithdata";
 const DB_NAME = "clienttest";
