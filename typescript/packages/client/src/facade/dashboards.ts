@@ -101,6 +101,48 @@ function toPromQLDataResponse(data: components["schemas"]["PromQLDataResponse"])
   return data as unknown as PromQLDataResponse;
 }
 
+/**
+ * Anchors the hand-declared `PromQLResult`/`PromQLVectorSample`/`PromQLMatrixSeries` types (above)
+ * back to what `openapi-typescript` actually generates for `PromQLDataResponse.data`. Those hand
+ * types exist because the generator flattens the server's `anyOf` into an anonymous,
+ * non-discriminated union with no usable name to import - see `PromQLResult`'s doc comment. That
+ * makes them a hand-maintained description of a server payload: if the contract's PromQL branch
+ * shapes ever change, the boundary cast above absorbs the difference silently and this client
+ * would misrepresent the server's data with nothing to catch it.
+ *
+ * These checks tie the two together so a contract change breaks `tsc` instead of drifting
+ * unnoticed:
+ *  - the generated vector/matrix element shapes are extracted from the `result` union via
+ *    `Extract`, keyed on each branch's distinguishing field (`value` vs `values`) since the
+ *    generator does not preserve `resultType` as a discriminant;
+ *  - each generated element type must extend its hand-declared counterpart (catches the generator
+ *    dropping or renaming a field our hand type still claims);
+ *  - each hand-declared element type must extend its generated counterpart (catches the generator
+ *    adding a new required field our hand type does not carry, or narrowing a field's type).
+ * Together the two directions require structural equality, not just one-way compatibility -
+ * one-way alone would pass trivially because every array type is assignable to the `unknown[]`
+ * scalar branch that is also part of the generated union.
+ */
+type GeneratedPromQLResultField = NonNullable<NonNullable<components["schemas"]["PromQLDataResponse"]["data"]>["result"]>;
+type GeneratedPromQLVectorSample = Extract<GeneratedPromQLResultField, { value: unknown }[]>[number];
+type GeneratedPromQLMatrixSeries = Extract<GeneratedPromQLResultField, { values: unknown }[]>[number];
+
+type _AssertVectorSampleMatchesGenerated = [GeneratedPromQLVectorSample] extends [PromQLVectorSample]
+  ? [PromQLVectorSample] extends [GeneratedPromQLVectorSample]
+    ? true
+    : never
+  : never;
+type _AssertMatrixSeriesMatchesGenerated = [GeneratedPromQLMatrixSeries] extends [PromQLMatrixSeries]
+  ? [PromQLMatrixSeries] extends [GeneratedPromQLMatrixSeries]
+    ? true
+    : never
+  : never;
+
+const _promQLVectorSampleIsAnchored: _AssertVectorSampleMatchesGenerated = true;
+const _promQLMatrixSeriesIsAnchored: _AssertMatrixSeriesMatchesGenerated = true;
+void _promQLVectorSampleIsAnchored;
+void _promQLMatrixSeriesIsAnchored;
+
 /** Executes `GET /api/v1/ts/{database}/prom/api/v1/query`: evaluates a PromQL expression at one instant. */
 export async function queryPromQL(client: RawClient, database: string, opts: PromQLQueryOptions): Promise<PromQLDataResponse> {
   const data = await unwrap(
