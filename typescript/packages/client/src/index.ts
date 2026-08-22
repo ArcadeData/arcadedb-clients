@@ -4,11 +4,27 @@ import type { components, paths } from "./generated/schema.js";
 import { ArcadeDBError } from "./errors.js";
 import { beginTransaction, commitTransaction, executeCommand, executeQuery, rollbackTransaction } from "./facade/data.js";
 import type { QueryEnvelope, QueryOptions } from "./facade/data.js";
+import { GrafanaNamespace, PromQLNamespace } from "./facade/dashboards.js";
+import { TimeSeriesNamespace } from "./facade/timeseries.js";
 
 export { ArcadeDBError } from "./errors.js";
 export { basicAuth, bearerAuth } from "./auth.js";
 export type { Middleware } from "openapi-fetch";
 export type { QueryEnvelope, QueryLanguage, QueryOptions } from "./facade/data.js";
+export type {
+  GrafanaQueryOptions,
+  GrafanaQueryResponse,
+  PromQLDataResponse,
+  PromQLLabelsResponse,
+  PromQLMatrixSeries,
+  PromQLQueryOptions,
+  PromQLQueryRangeOptions,
+  PromQLResult,
+  PromQLSeriesOptions,
+  PromQLSeriesResponse,
+  PromQLVectorSample,
+} from "./facade/dashboards.js";
+export type { TimeSeriesQueryOptions, TimeSeriesQueryResult, TimeSeriesWriteOptions } from "./facade/timeseries.js";
 
 /** The unwrapped openapi-fetch client, typed against ArcadeDB's OpenAPI schema. */
 type RawClient = Client<paths>;
@@ -37,11 +53,22 @@ export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; re
  * transaction rather than auto-committing individually.
  */
 export class ArcadeDBDatabase {
+  /** Ingests and queries samples in a time-series type. */
+  readonly ts: TimeSeriesNamespace;
+  /** Grafana panel queries over a time-series type. */
+  readonly grafana: GrafanaNamespace;
+  /** A Prometheus-compatible query surface over a time-series type. */
+  readonly promql: PromQLNamespace;
+
   constructor(
     private readonly client: RawClient,
     readonly name: string,
     private readonly sessionId?: string,
-  ) {}
+  ) {
+    this.ts = new TimeSeriesNamespace(client, name);
+    this.grafana = new GrafanaNamespace(client, name);
+    this.promql = new PromQLNamespace(client, name);
+  }
 
   /** Executes a read-or-write query and returns the whole result envelope - not just `result`. */
   async query<T = unknown>(opts: QueryOptions): Promise<QueryEnvelope<T>> {
