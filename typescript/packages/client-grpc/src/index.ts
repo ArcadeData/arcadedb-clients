@@ -4,10 +4,12 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import { ArcadeDbService } from "./gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
 import { sendsPlaintextPassword } from "./auth.js";
 import { createInsertStream, createStreamQuery } from "./stream.js";
+import { createTransaction } from "./transaction.js";
 
 export { bearerAuth, passwordAuth } from "./auth.js";
 export type { Interceptor } from "@connectrpc/connect";
 export type { InsertStreamRequest, StreamQueryRequestInit } from "./stream.js";
+export type { TransactionHandle } from "./transaction.js";
 
 /** The generated Connect client for `com.arcadedb.grpc.ArcadeDbService` (the data plane). */
 type RawClient = Client<typeof ArcadeDbService>;
@@ -47,6 +49,14 @@ export interface ArcadeDBGrpcClient {
    * `last` envelope bookkeeping - see {@link InsertStreamRequest}.
    */
   insertStream: ReturnType<typeof createInsertStream>;
+  /**
+   * Runs `fn` inside a server-side transaction: begins it, hands `fn` a {@link TransactionHandle}
+   * whose calls all carry the transaction's id automatically, and ends the transaction on both
+   * the success and failure paths - see `transaction.ts` for the full commit/rollback contract.
+   * This is the safety net against the transaction-hijack, silent-data-loss and leaked-transaction
+   * defects the 2026-07 gRPC audit filed as #5040-#5042.
+   */
+  transaction: ReturnType<typeof createTransaction>;
 }
 
 /**
@@ -73,5 +83,6 @@ export function createClient(opts: CreateClientOptions): ArcadeDBGrpcClient {
     raw,
     streamQuery: createStreamQuery(raw),
     insertStream: createInsertStream(raw),
+    transaction: createTransaction(raw),
   };
 }
