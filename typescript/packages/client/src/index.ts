@@ -188,6 +188,19 @@ export class ArcadeDBDatabase {
    * transaction. Commits when `fn` resolves and returns its value; rolls
    * back and re-throws the original error when `fn` throws or rejects,
    * synchronously or otherwise.
+   *
+   * Two failure paths beyond `fn` throwing are handled explicitly so the
+   * server-side session is never left open and the caller's real error is
+   * never swallowed:
+   *  - if `fn` throws and the resulting rollback itself fails, the
+   *    rollback's error is attached as `cause` on `fn`'s error (when that
+   *    error is an `Error`) rather than replacing it - `fn`'s error is what
+   *    the caller asked about.
+   *  - if the commit itself fails, a best-effort rollback is issued to
+   *    release the session (its own failure is swallowed - the commit
+   *    error is what the caller needs to see) before the commit error is
+   *    re-thrown. Without this, a failed commit leaves the session open
+   *    server-side until `arcadedb.server.httpTxExpireTimeout` reaps it.
    */
   async transaction<T>(fn: (tx: ArcadeDBDatabase) => Promise<T>): Promise<T> {
     const sessionId = await beginTransaction(this.client, this.name);
@@ -196,10 +209,27 @@ export class ArcadeDBDatabase {
     try {
       result = await fn(tx);
     } catch (err) {
-      await rollbackTransaction(this.client, this.name, sessionId);
+      try {
+        await rollbackTransaction(this.client, this.name, sessionId);
+      } catch (rollbackErr) {
+        if (err instanceof Error) {
+          err.cause = rollbackErr;
+        }
+      }
       throw err;
     }
-    await commitTransaction(this.client, this.name, sessionId);
+    try {
+      await commitTransaction(this.client, this.name, sessionId);
+    } catch (commitErr) {
+      try {
+        await rollbackTransaction(this.client, this.name, sessionId);
+      } catch {
+        // Best-effort: the commit error is what the caller needs to see, so the rollback's own
+        // failure (the session may already be gone, or the server may be unreachable) is
+        // deliberately discarded here rather than overwriting or chaining onto commitErr.
+      }
+      throw commitErr;
+    }
     return result;
   }
 }

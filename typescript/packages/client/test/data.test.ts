@@ -117,9 +117,11 @@ describe("ArcadeDBDatabase.transaction", () => {
       "/api/v1/commit/mydb",
     ]);
     // The session-threading assertion that matters: every call issued through the
-    // handle passed to `fn` must carry the session id `begin` returned.
+    // handle passed to `fn` must carry the session id `begin` returned - including commit
+    // itself (M8: a header regression on commit/rollback stayed invisible before this).
     expect(calls[1].sessionHeader).toBe("sess-123");
     expect(calls[2].sessionHeader).toBe("sess-123");
+    expect(calls[3].sessionHeader).toBe("sess-123");
   });
 
   it("returns the body's resolved value", async () => {
@@ -137,10 +139,10 @@ describe("ArcadeDBDatabase.transaction", () => {
   });
 
   it("rolls back, not commits, when the body throws, and re-throws the original error", async () => {
-    const calls: string[] = [];
+    const calls: { url: string; sessionHeader: string | null }[] = [];
     const fetchMock = vi.fn(async (request: Request) => {
       const url = new URL(request.url).pathname;
-      calls.push(url);
+      calls.push({ url, sessionHeader: request.headers.get("arcadedb-session-id") });
       if (url === "/api/v1/begin/mydb") return noContent(204, { "arcadedb-session-id": "sess-456" });
       if (url === "/api/v1/rollback/mydb") return noContent();
       throw new Error(`unexpected request to ${url}`);
@@ -158,7 +160,9 @@ describe("ArcadeDBDatabase.transaction", () => {
     }
 
     expect(caught).toBe(boom);
-    expect(calls).toEqual(["/api/v1/begin/mydb", "/api/v1/rollback/mydb"]);
+    expect(calls.map((c) => c.url)).toEqual(["/api/v1/begin/mydb", "/api/v1/rollback/mydb"]);
+    // M8: the rollback call must also carry the session header, not just query/command.
+    expect(calls[1].sessionHeader).toBe("sess-456");
   });
 
   it("rolls back even when the body throws synchronously (not merely a rejected promise)", async () => {
@@ -186,11 +190,14 @@ describe("ArcadeDBDatabase.transaction", () => {
     expect(calls).toEqual(["/api/v1/begin/mydb", "/api/v1/rollback/mydb"]);
   });
 
-  it("surfaces a failing commit as ArcadeDBError", async () => {
+  it("surfaces a failing commit as ArcadeDBError and issues a best-effort rollback (I3)", async () => {
+    const calls: string[] = [];
     const fetchMock = vi.fn(async (request: Request) => {
       const url = new URL(request.url).pathname;
+      calls.push(url);
       if (url === "/api/v1/begin/mydb") return noContent(204, { "arcadedb-session-id": "sess-commit-fail" });
       if (url === "/api/v1/commit/mydb") return jsonResponse({ error: "commit failed" }, 500);
+      if (url === "/api/v1/rollback/mydb") return noContent();
       throw new Error(`unexpected request to ${url}`);
     });
     const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
@@ -204,5 +211,35 @@ describe("ArcadeDBDatabase.transaction", () => {
 
     expect(caught).toBeInstanceOf(ArcadeDBError);
     expect((caught as ArcadeDBError).status).toBe(500);
+    // I3: a failed commit must not leak the server-side session - a rollback must follow it.
+    expect(calls).toEqual(["/api/v1/begin/mydb", "/api/v1/commit/mydb", "/api/v1/rollback/mydb"]);
+  });
+
+  it("surfaces the body's own error, not the rollback's, when both the body throws and the rollback fails (I2)", async () => {
+    const fetchMock = vi.fn(async (request: Request) => {
+      const url = new URL(request.url).pathname;
+      if (url === "/api/v1/begin/mydb") return noContent(204, { "arcadedb-session-id": "sess-both-fail" });
+      if (url === "/api/v1/rollback/mydb") return jsonResponse({ error: "rollback failed" }, 500);
+      throw new Error(`unexpected request to ${url}`);
+    });
+    const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
+
+    const boom = new Error("the caller's real failure");
+    let caught: unknown;
+    try {
+      await server.db("mydb").transaction(async () => {
+        throw boom;
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    // The BODY's error surfaces, not the rollback's - this is the assertion I2 exists to protect.
+    expect(caught).toBe(boom);
+    expect((caught as Error).message).toBe("the caller's real failure");
+    // The rollback failure is not silently lost either: it is attached as `cause`.
+    expect((caught as Error).cause).toBeInstanceOf(ArcadeDBError);
+    expect(((caught as Error).cause as ArcadeDBError).status).toBe(500);
+    expect(((caught as Error).cause as ArcadeDBError).error).toBe("rollback failed");
   });
 });

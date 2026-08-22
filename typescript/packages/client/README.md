@@ -79,7 +79,11 @@ const total = await db.transaction(async (tx) => {
 
 Every call made through the `tx` handle passed into the callback - not the outer `db` - takes part
 in the transaction. `transaction` commits when the callback resolves and returns its value; it
-rolls back and re-throws when the callback throws or rejects, synchronously or otherwise.
+rolls back and re-throws when the callback throws or rejects, synchronously or otherwise. The
+error the caller sees is always the callback's own error, never the rollback's - if the rollback
+itself also fails, that failure is attached as `err.cause` rather than replacing `err`. If the
+commit itself fails, `transaction` issues a best-effort rollback (to release the server-side
+session) before re-throwing the commit's error.
 
 ## Two error models
 
