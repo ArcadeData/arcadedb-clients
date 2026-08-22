@@ -39,7 +39,7 @@ jobs:
         working-directory: typescript
         run: |
           npm run generate
-          git diff --exit-code -- packages/client/src/generated
+          git diff --exit-code -- packages/client/src/generated packages/client-grpc/src/gen
 
       - name: Lint
         working-directory: typescript

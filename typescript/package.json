@@ -9,7 +9,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "generate": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.ts",
+    "generate": "npm run generate:http && npm run generate:grpc",
+    "generate:http": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.ts",
+    "generate:grpc": "buf generate --template buf.gen.yaml ..",
     "typecheck": "tsc --build",
     "lint": "eslint .",
     "test": "vitest run",
