@@ -28,8 +28,17 @@ describe("db.grafana.query", () => {
   });
 });
 
+// The three tests below assert the runtime passthrough of each `resultType` branch's payload -
+// that is all vitest (transpile-only, types stripped before the test runs) can actually verify.
+// The "narrows without a cast" claim is a compile-time property of `PromQLResult` being a real
+// discriminated union: `if (data.resultType === "vector") data.result` has type
+// `PromQLVectorSample[]` with no cast needed. That property is real - `PromQLResult`'s own doc
+// comment explains it, and `tsc` would reject a cast-free narrowing if it broke - but it is a
+// type-checker fact, not something these `if`/`throw` runtime checks below exercise. Deleting the
+// whole discriminated-union apparatus and replacing it with an untyped `any` would leave these
+// tests byte-identical at runtime and still green.
 describe("db.promql.query", () => {
-  it("narrows to instant samples, without a cast, when resultType is vector", async () => {
+  it("returns the vector-branch payload (metric, value) when resultType is vector", async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse(
         { status: "success", data: { resultType: "vector", result: [{ metric: { __name__: "up" }, value: [1700000000, "1"] }] } },
@@ -42,8 +51,6 @@ describe("db.promql.query", () => {
     const data = response.data;
 
     if (data !== undefined && data.resultType === "vector") {
-      // No cast: `data.result` is typed as `PromQLVectorSample[]` here purely from the
-      // `resultType === "vector"` narrowing.
       expect(data.result[0].metric).toEqual({ __name__: "up" });
       expect(data.result[0].value).toEqual([1700000000, "1"]);
     } else {
@@ -51,7 +58,7 @@ describe("db.promql.query", () => {
     }
   });
 
-  it("narrows to range series, without a cast, when resultType is matrix", async () => {
+  it("returns the matrix-branch payload (metric, values) when resultType is matrix", async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse(
         {
@@ -70,8 +77,6 @@ describe("db.promql.query", () => {
     const data = response.data;
 
     if (data !== undefined && data.resultType === "matrix") {
-      // No cast: `data.result` is typed as `PromQLMatrixSeries[]` here purely from the
-      // `resultType === "matrix"` narrowing.
       expect(data.result[0].metric).toEqual({ __name__: "up" });
       expect(data.result[0].values).toEqual([[1700000000, "1"], [1700000060, "1"]]);
     } else {
@@ -79,7 +84,7 @@ describe("db.promql.query", () => {
     }
   });
 
-  it("narrows to a single [timestamp, value] pair, without a cast, when resultType is scalar", async () => {
+  it("returns the scalar-branch payload ([timestamp, value]) when resultType is scalar", async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ status: "success", data: { resultType: "scalar", result: [1700000000, "42"] } }, 200));
     const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
 
@@ -87,8 +92,6 @@ describe("db.promql.query", () => {
     const data = response.data;
 
     if (data !== undefined && data.resultType === "scalar") {
-      // No cast: `data.result` is typed as `unknown[]` here purely from the
-      // `resultType === "scalar"` narrowing.
       expect(data.result).toEqual([1700000000, "42"]);
     } else {
       throw new Error("expected the scalar branch");

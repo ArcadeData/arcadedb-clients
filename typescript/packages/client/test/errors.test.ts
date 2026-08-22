@@ -57,12 +57,20 @@ describe("ArcadeDBError", () => {
     expect(err.message).toContain("500");
   });
 
-  it("tolerates a non-JSON (string) body without throwing", () => {
+  it("discards a non-JSON (string) body entirely, falling back to the default message", () => {
+    // A string body is not "object", so parseBody's `typeof body !== "object"` guard drops it
+    // wholesale rather than reading properties off it - a change that instead read, say,
+    // `body.error` off a string primitive (`undefined`, no throw) would sail past a looser
+    // assertion. Asserting the exact fallback message, and every optional field as undefined,
+    // is what makes that distinction visible.
     const err = new ArcadeDBError(502, "Bad Gateway from upstream proxy");
 
     expect(err.status).toBe(502);
     expect(err.error).toBeUndefined();
-    expect(err.message).toContain("502");
+    expect(err.exception).toBeUndefined();
+    expect(err.detail).toBeUndefined();
+    expect(err.requestId).toBeUndefined();
+    expect(err.message).toBe("ArcadeDB request failed with status 502");
   });
 
   it("tolerates a null body without throwing", () => {

@@ -97,8 +97,16 @@ function toPromQLDataResponse(data: components["schemas"]["PromQLDataResponse"])
  * shapes ever change, the boundary cast above absorbs the difference silently and this client
  * would misrepresent the server's data with nothing to catch it.
  *
- * These checks tie the two together so a contract change breaks `tsc` instead of drifting
- * unnoticed:
+ * Two independent things are anchored below, and each catches a different kind of drift - neither
+ * substitutes for the other:
+ *  - the SHAPE of the `vector`/`matrix` elements (this block): a rename, drop, or type change on
+ *    `metric`/`value`/`values` breaks `tsc`;
+ *  - the SET of `resultType` branches (further below): a fourth branch added to the contract (for
+ *    example PromQL's own `"string"` type, which Prometheus itself has and ArcadeDB does not emit
+ *    today) or one removed breaks `tsc`. Element-shape anchoring alone does not catch this - it has
+ *    nothing to say about a `resultType` value neither union mentions.
+ *
+ * The element-shape checks:
  *  - the generated vector/matrix element shapes are extracted from the `result` union via
  *    `Extract`, keyed on each branch's distinguishing field (`value` vs `values`) since the
  *    generator does not preserve `resultType` as a discriminant;
@@ -129,6 +137,24 @@ const _promQLVectorSampleIsAnchored: _AssertVectorSampleMatchesGenerated = true;
 const _promQLMatrixSeriesIsAnchored: _AssertMatrixSeriesMatchesGenerated = true;
 void _promQLVectorSampleIsAnchored;
 void _promQLMatrixSeriesIsAnchored;
+
+/**
+ * Anchors the SET of `resultType` branches `PromQLResult` hand-declares against what the
+ * generated schema actually enumerates (see the doc comment above). This is the check that
+ * catches a fourth branch appearing in - or one disappearing from - the contract; the
+ * element-shape anchors above do not, because they only compare the branches both sides already
+ * agree exist.
+ */
+type GeneratedPromQLResultType = NonNullable<NonNullable<components["schemas"]["PromQLDataResponse"]["data"]>["resultType"]>;
+
+type _AssertResultTypesMatchGenerated = [GeneratedPromQLResultType] extends [PromQLResult["resultType"]]
+  ? [PromQLResult["resultType"]] extends [GeneratedPromQLResultType]
+    ? true
+    : never
+  : never;
+
+const _promQLResultTypesAreAnchored: _AssertResultTypesMatchGenerated = true;
+void _promQLResultTypesAreAnchored;
 
 /** Executes `GET /api/v1/ts/{database}/prom/api/v1/query`: evaluates a PromQL expression at one instant. */
 export async function queryPromQL(client: RawClient, database: string, opts: PromQLQueryOptions): Promise<PromQLDataResponse> {

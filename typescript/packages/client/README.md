@@ -158,10 +158,10 @@ chunk that excludes the time-series, Grafana, and PromQL modules; they load only
 `db.ts`, `db.grafana`, or `db.promql` is actually reached. Without code splitting, a bundler
 inlines those dynamic imports into the single output file, and all three modules ship regardless
 of whether they're used. This is verified by `test/treeshake.test.ts`, which bundles a
-data-plane-only entry point with esbuild's `splitting` option on and asserts the PromQL and
-Grafana route markers are absent from the chunk reachable via static imports alone - it does not
-claim, and this README does not claim, that the package sheds unused code under every bundler
-configuration.
+data-plane-only entry point with esbuild's `splitting` option on and asserts the PromQL, Grafana,
+and time-series route markers are all absent from the chunk reachable via static imports alone -
+it does not claim, and this README does not claim, that the package sheds unused code under every
+bundler configuration.
 
 ## License
 
