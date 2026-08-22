@@ -3,9 +3,11 @@ import type { Client, Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { ArcadeDbService } from "./gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
 import { sendsPlaintextPassword } from "./auth.js";
+import { createInsertStream, createStreamQuery } from "./stream.js";
 
 export { bearerAuth, passwordAuth } from "./auth.js";
 export type { Interceptor } from "@connectrpc/connect";
+export type { InsertStreamRequest, StreamQueryRequestInit } from "./stream.js";
 
 /** The generated Connect client for `com.arcadedb.grpc.ArcadeDbService` (the data plane). */
 type RawClient = Client<typeof ArcadeDbService>;
@@ -35,6 +37,16 @@ export interface CreateClientOptions {
 export interface ArcadeDBGrpcClient {
   /** The generated Connect client for the `ArcadeDbService` data plane. */
   raw: RawClient;
+  /**
+   * Streams a query's results row by row. `retrievalMode` and `batchSize` pass through to the
+   * server unchanged - see {@link StreamQueryRequestInit}.
+   */
+  streamQuery: ReturnType<typeof createStreamQuery>;
+  /**
+   * Streams rows to the server in chunks, handling the `session_id` / `chunk_seq` / `database` /
+   * `last` envelope bookkeeping - see {@link InsertStreamRequest}.
+   */
+  insertStream: ReturnType<typeof createInsertStream>;
 }
 
 /**
@@ -57,5 +69,9 @@ export function createClient(opts: CreateClientOptions): ArcadeDBGrpcClient {
   const transport = createGrpcTransport({ baseUrl, interceptors: auth ? [auth] : [] });
   const raw = createConnectClient(ArcadeDbService, transport);
 
-  return { raw };
+  return {
+    raw,
+    streamQuery: createStreamQuery(raw),
+    insertStream: createInsertStream(raw),
+  };
 }
