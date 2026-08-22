@@ -255,4 +255,57 @@ describe("ArcadeDBDatabase.transaction", () => {
     expect(((caught as Error).cause as ArcadeDBError).status).toBe(500);
     expect(((caught as Error).cause as ArcadeDBError).error).toBe("rollback failed");
   });
+
+  it("surfaces a frozen error as itself, not a TypeError, when both the body throws and the rollback fails", async () => {
+    // A frozen Error is non-extensible: `err.cause = rollbackErr` throws
+    // `TypeError: Cannot add property cause, object is not extensible` in strict-mode ESM.
+    // Libraries that intern sentinel errors freeze them, so this is not a contrived input.
+    const fetchMock = vi.fn(async (request: Request) => {
+      const url = new URL(request.url).pathname;
+      if (url === "/api/v1/begin/mydb") return noContent(204, { "arcadedb-session-id": "sess-frozen" });
+      if (url === "/api/v1/rollback/mydb") return jsonResponse({ error: "rollback failed" }, 500);
+      throw new Error(`unexpected request to ${url}`);
+    });
+    const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
+
+    const boom = Object.freeze(new Error("frozen sentinel failure"));
+    let caught: unknown;
+    try {
+      await server.db("mydb").transaction(async () => {
+        throw boom;
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    // The frozen error itself surfaces - not a TypeError from the failed `cause` assignment.
+    expect(caught).toBe(boom);
+    expect((caught as Error).message).toBe("frozen sentinel failure");
+    expect((caught as Error).cause).toBeUndefined();
+  });
+
+  it("does not overwrite a caller-set cause when the rollback also fails", async () => {
+    const fetchMock = vi.fn(async (request: Request) => {
+      const url = new URL(request.url).pathname;
+      if (url === "/api/v1/begin/mydb") return noContent(204, { "arcadedb-session-id": "sess-cause" });
+      if (url === "/api/v1/rollback/mydb") return jsonResponse({ error: "rollback failed" }, 500);
+      throw new Error(`unexpected request to ${url}`);
+    });
+    const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
+
+    const originalCause = new Error("the caller's own causal chain");
+    const boom = new Error("the caller's real failure", { cause: originalCause });
+    let caught: unknown;
+    try {
+      await server.db("mydb").transaction(async () => {
+        throw boom;
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    // The caller's own `cause` survives - it is not replaced by the rollback's error.
+    expect(caught).toBe(boom);
+    expect((caught as Error).cause).toBe(originalCause);
+  });
 });

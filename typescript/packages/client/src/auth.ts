@@ -1,5 +1,22 @@
 import type { Middleware } from "openapi-fetch";
 
+/** Bytes folded into one `String.fromCharCode` call at a time - comfortably under any engine's argument-count ceiling. */
+const CHUNK_SIZE = 8192;
+
+/**
+ * Converts raw octets to a Latin-1 string (one char code per byte), the shape `btoa` expects.
+ * Chunked so an arbitrarily large `octets` never blows the call stack; see `basicAuth`'s doc
+ * comment for why a single spread call cannot be used here.
+ */
+function octetsToLatin1String(octets: Uint8Array): string {
+  let result = "";
+  for (let offset = 0; offset < octets.length; offset += CHUNK_SIZE) {
+    const chunk = octets.subarray(offset, offset + CHUNK_SIZE);
+    result += String.fromCharCode(...chunk);
+  }
+  return result;
+}
+
 /**
  * HTTP Basic auth middleware. Encodes `user:password` as UTF-8, then base64,
  * matching RFC 7617 and what ArcadeDB's server expects.
@@ -15,10 +32,16 @@ import type { Middleware } from "openapi-fetch";
  * same runtimes `btoa` is - Node 20+, browsers, Cloudflare Workers, Deno -
  * so this keeps the "not `Buffer`" property the tests guard: `Buffer` is
  * Node-only and this package's primary targets do not have it.
+ *
+ * The octets are folded into the Latin-1 string a chunk at a time, not via
+ * `String.fromCharCode(...octets)`: spreading puts one argument on the call
+ * stack per byte, and a credential of roughly 100 KB or more raises
+ * `RangeError: Maximum call stack size exceeded` - a failure the plain
+ * string version of this function did not have.
  */
 export function basicAuth(user: string, password: string): Middleware {
   const octets = new TextEncoder().encode(`${user}:${password}`);
-  const credential = btoa(String.fromCharCode(...octets));
+  const credential = btoa(octetsToLatin1String(octets));
   return {
     onRequest({ request }) {
       request.headers.set("Authorization", `Basic ${credential}`);

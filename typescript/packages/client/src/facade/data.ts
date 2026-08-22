@@ -12,10 +12,14 @@ const SESSION_HEADER = "arcadedb-session-id";
 /** Query/command language, as accepted by the `/query` and `/command` endpoints. */
 export type QueryLanguage = "sql" | "cypher" | "gremlin" | "graphql" | "mongo";
 
-export interface QueryOptions {
+/** Options shared by `/command`. `QueryOptions` below adds `limit`, which `/command`'s contract does not have. */
+export interface CommandOptions {
   language: QueryLanguage;
   command: string;
   params?: Record<string, unknown>;
+}
+
+export interface QueryOptions extends CommandOptions {
   /**
    * Maximum number of rows to serialize into the response. When omitted, a `LIMIT` stated by the
    * query is honored as written, and only a query stating none is capped by the server default
@@ -23,6 +27,12 @@ export interface QueryOptions {
    * single response past the server's hard ceiling (`arcadedb.server.httpQueryMaxResultRows`): a
    * result that would exceed it is refused with 413 instead of being truncated - so raising this
    * is not always the fix for a `truncated: true` response; see `QueryEnvelope`'s doc comment.
+   *
+   * `/command`'s contract (`CommandRequest`) has no `limit` field, even though the server
+   * happens to honor one there too (`PostCommandHandler` reads it as optional) - this is
+   * query-only so a typed public option is never shipped with no contract behind it. Adding
+   * `limit` to `CommandOptions` later, if the contract grows one, is additive and
+   * backwards-compatible.
    */
   limit?: number;
 }
@@ -56,20 +66,31 @@ function toEnvelope<T>(data: components["schemas"]["QueryResponse"]): QueryEnvel
 }
 
 /**
- * Builds the JSON body shared by `/query` and `/command`. Only `params` is cast: it is typed
- * `Record<string, never>` in the generated schema (an openapi-typescript artifact for "untyped
- * object", not a real restriction), so a caller-supplied `Record<string, unknown>` needs a
- * narrow cast to satisfy it. `command`, `language`, and `limit` are passed through with their
- * real types and are NOT cast, so a contract change to any of them still fails `tsc` here instead
- * of only failing on the wire - that structural check is the reason this generated client exists.
+ * Builds the JSON body for `/command`. Only `params` is cast: it is typed `Record<string, never>`
+ * in the generated schema (an openapi-typescript artifact for "untyped object", not a real
+ * restriction), so a caller-supplied `Record<string, unknown>` needs a narrow cast to satisfy it.
+ * `command` and `language` are passed through with their real types and are NOT cast, so a type
+ * change to, or removal of, either required field still fails `tsc` here instead of only failing
+ * on the wire.
+ *
+ * This does NOT extend to a field being removed from the contract outright: this function has an
+ * annotated return type, so the object literal handed to `body:` at each call site is not checked
+ * as a fresh literal, and excess-property checking never fires for a stray field that no longer
+ * exists on the target type.
  */
-function buildBody(opts: QueryOptions): { command: string; language: string; params?: Record<string, never>; limit?: number } {
+function buildCommandBody(opts: CommandOptions): { command: string; language: string; params?: Record<string, never> } {
   return {
     command: opts.command,
     language: opts.language,
     params: opts.params as Record<string, never> | undefined,
-    limit: opts.limit,
   };
+}
+
+/** Builds the JSON body for `/query`: `buildCommandBody`'s fields plus `limit`, sent only when supplied. */
+function buildQueryBody(
+  opts: QueryOptions,
+): { command: string; language: string; params?: Record<string, never>; limit?: number } {
+  return { ...buildCommandBody(opts), limit: opts.limit };
 }
 
 /** Attaches the session header when `sessionId` is set; omits it otherwise. */
@@ -87,7 +108,7 @@ export async function executeQuery<T = unknown>(
   const data = await unwrap(
     client.POST("/api/v1/query/{database}", {
       params: { path: { database }, header: sessionHeader(sessionId) },
-      body: buildBody(opts),
+      body: buildQueryBody(opts),
     }),
   );
   return toEnvelope<T>(data);
@@ -104,12 +125,12 @@ export async function executeCommand<T = unknown>(
   client: RawClient,
   database: string,
   sessionId: string | undefined,
-  opts: QueryOptions,
+  opts: CommandOptions,
 ): Promise<QueryEnvelope<T>> {
   const data = await unwrap(
     client.POST("/api/v1/command/{database}", {
       params: { path: { database }, header: sessionHeader(sessionId) },
-      body: buildBody(opts),
+      body: buildCommandBody(opts),
     }),
   );
   return toEnvelope<T>(data);

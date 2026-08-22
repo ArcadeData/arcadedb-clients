@@ -4,7 +4,7 @@ import type { components, paths } from "./generated/schema.js";
 import { ArcadeDBError } from "./errors.js";
 import { unwrap } from "./internal/unwrap.js";
 import { beginTransaction, commitTransaction, executeCommand, executeQuery, rollbackTransaction } from "./facade/data.js";
-import type { QueryEnvelope, QueryOptions } from "./facade/data.js";
+import type { CommandOptions, QueryEnvelope, QueryOptions } from "./facade/data.js";
 import type {
   GrafanaQueryOptions,
   GrafanaQueryResponse,
@@ -20,7 +20,7 @@ import type { TimeSeriesQueryOptions, TimeSeriesQueryResult, TimeSeriesWriteOpti
 export { ArcadeDBError } from "./errors.js";
 export { basicAuth, bearerAuth } from "./auth.js";
 export type { Middleware } from "openapi-fetch";
-export type { QueryEnvelope, QueryLanguage, QueryOptions } from "./facade/data.js";
+export type { CommandOptions, QueryEnvelope, QueryLanguage, QueryOptions } from "./facade/data.js";
 export type {
   GrafanaQueryOptions,
   GrafanaQueryResponse,
@@ -169,7 +169,7 @@ export class ArcadeDBDatabase {
   }
 
   /** Executes a command and returns the whole result envelope - not just `result`. */
-  async command<T = unknown>(opts: QueryOptions): Promise<QueryEnvelope<T>> {
+  async command<T = unknown>(opts: CommandOptions): Promise<QueryEnvelope<T>> {
     return executeCommand<T>(this.client, this.name, this.sessionId, opts);
   }
 
@@ -187,7 +187,12 @@ export class ArcadeDBDatabase {
    *  - if `fn` throws and the resulting rollback itself fails, the
    *    rollback's error is attached as `cause` on `fn`'s error (when that
    *    error is an `Error`) rather than replacing it - `fn`'s error is what
-   *    the caller asked about.
+   *    the caller asked about. The attach is skipped when `fn`'s error
+   *    already has a `cause` (a caller-set causal chain is never
+   *    overwritten) and is swallowed if it throws (a frozen/non-extensible
+   *    error - some libraries intern sentinel errors - cannot take a new
+   *    property in strict-mode ESM; `fn`'s error still gets re-thrown as
+   *    itself either way).
    *  - if the commit itself fails, a best-effort rollback is issued to
    *    release the session (its own failure is swallowed - the commit
    *    error is what the caller needs to see) before the commit error is
@@ -205,7 +210,15 @@ export class ArcadeDBDatabase {
         await rollbackTransaction(this.client, this.name, sessionId);
       } catch (rollbackErr) {
         if (err instanceof Error) {
-          err.cause = rollbackErr;
+          try {
+            if (err.cause === undefined) {
+              err.cause = rollbackErr;
+            }
+          } catch {
+            // err is frozen/non-extensible - assigning `cause` would throw in strict-mode ESM.
+            // The rollback failure is dropped in that case; `err` is what the caller asked
+            // about and is re-thrown below regardless.
+          }
         }
       }
       throw err;

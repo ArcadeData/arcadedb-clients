@@ -92,6 +92,23 @@ describe("basicAuth", () => {
 
     expect(finalRequest.headers.get("Authorization")).toBe("Basic cm9vdDrlr4bnoIE=");
   });
+
+  it("encodes a ~100KB credential without RangeError: Maximum call stack size exceeded", () => {
+    // String.fromCharCode(...octets) spreads one argument per byte onto the call stack - a
+    // credential around 100KB or larger blows it. This is what basicAuth's chunked conversion
+    // guards against.
+    const longPassword = "x".repeat(100_000);
+    const middleware = basicAuth("root", longPassword);
+    const request = new Request("https://example.com/api/v1/databases");
+
+    const result = middleware.onRequest?.(callbackParams(request));
+    const finalRequest = (result ?? request) as Request;
+
+    const header = finalRequest.headers.get("Authorization");
+    expect(header).toMatch(/^Basic /);
+    const decoded = Buffer.from(header!.slice("Basic ".length), "base64").toString("utf8");
+    expect(decoded).toBe(`root:${longPassword}`);
+  });
 });
 
 describe("bearerAuth", () => {
