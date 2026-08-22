@@ -52,3 +52,7 @@ jobs:
       - name: Test
         working-directory: typescript
         run: npm test
+
+      - name: Tree-shaking check
+        working-directory: typescript
+        run: npx vitest run packages/client/test/treeshake.test.ts

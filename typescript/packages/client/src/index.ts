@@ -4,8 +4,17 @@ import type { components, paths } from "./generated/schema.js";
 import { ArcadeDBError } from "./errors.js";
 import { beginTransaction, commitTransaction, executeCommand, executeQuery, rollbackTransaction } from "./facade/data.js";
 import type { QueryEnvelope, QueryOptions } from "./facade/data.js";
-import { GrafanaNamespace, PromQLNamespace } from "./facade/dashboards.js";
-import { TimeSeriesNamespace } from "./facade/timeseries.js";
+import type {
+  GrafanaQueryOptions,
+  GrafanaQueryResponse,
+  PromQLDataResponse,
+  PromQLLabelsResponse,
+  PromQLQueryOptions,
+  PromQLQueryRangeOptions,
+  PromQLSeriesOptions,
+  PromQLSeriesResponse,
+} from "./facade/dashboards.js";
+import type { TimeSeriesQueryOptions, TimeSeriesQueryResult, TimeSeriesWriteOptions } from "./facade/timeseries.js";
 
 export { ArcadeDBError } from "./errors.js";
 export { basicAuth, bearerAuth } from "./auth.js";
@@ -44,6 +53,90 @@ export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; re
 }
 
 /**
+ * Ingests and queries samples in a time-series type - the `db.ts` namespace.
+ *
+ * Each method dynamically imports `facade/timeseries.js` on first call rather than `index.ts`
+ * statically importing `TimeSeriesNamespace`. `db.ts`/`db.grafana`/`db.promql` are dashboard/ingest
+ * namespaces, not the data plane (`query`/`command`/`transaction`); every method here was already
+ * `Promise`-returning, so deferring the import to inside the method body is invisible to callers -
+ * `db.ts` itself stays a synchronous property access, only the first call pays the import cost. This
+ * is what lets a bundler that supports code-splitting keep `facade/timeseries.js` out of a chunk that
+ * only reaches `query`/`command`/`transaction`; see `test/treeshake.test.ts`.
+ */
+class LazyTimeSeriesNamespace {
+  constructor(
+    private readonly client: RawClient,
+    private readonly database: string,
+  ) {}
+
+  /** Ingests samples in InfluxDB Line Protocol. */
+  async write(opts: TimeSeriesWriteOptions): Promise<void> {
+    const { writeTimeSeries } = await import("./facade/timeseries.js");
+    return writeTimeSeries(this.client, this.database, opts);
+  }
+
+  /** Queries samples, optionally aggregated into buckets. */
+  async query(opts: TimeSeriesQueryOptions): Promise<TimeSeriesQueryResult> {
+    const { queryTimeSeries } = await import("./facade/timeseries.js");
+    return queryTimeSeries(this.client, this.database, opts);
+  }
+}
+
+/**
+ * Grafana panel queries over a time-series type - the `db.grafana` namespace.
+ *
+ * Lazily imports `facade/dashboards.js`; see `LazyTimeSeriesNamespace`'s doc comment for why.
+ */
+class LazyGrafanaNamespace {
+  constructor(
+    private readonly client: RawClient,
+    private readonly database: string,
+  ) {}
+
+  /** Executes one query per `targets` entry, returning DataFrames keyed by `refId`. */
+  async query(opts: GrafanaQueryOptions): Promise<GrafanaQueryResponse> {
+    const { queryGrafana } = await import("./facade/dashboards.js");
+    return queryGrafana(this.client, this.database, opts);
+  }
+}
+
+/**
+ * A Prometheus-compatible query surface over a time-series type - the `db.promql` namespace.
+ *
+ * Lazily imports `facade/dashboards.js`; see `LazyTimeSeriesNamespace`'s doc comment for why.
+ */
+class LazyPromQLNamespace {
+  constructor(
+    private readonly client: RawClient,
+    private readonly database: string,
+  ) {}
+
+  /** Evaluates a PromQL expression at one instant. */
+  async query(opts: PromQLQueryOptions): Promise<PromQLDataResponse> {
+    const { queryPromQL } = await import("./facade/dashboards.js");
+    return queryPromQL(this.client, this.database, opts);
+  }
+
+  /** Evaluates a PromQL expression at every step across a range. */
+  async queryRange(opts: PromQLQueryRangeOptions): Promise<PromQLDataResponse> {
+    const { queryRangePromQL } = await import("./facade/dashboards.js");
+    return queryRangePromQL(this.client, this.database, opts);
+  }
+
+  /** Lists every label name present in the database, sorted, always including `__name__`. */
+  async labels(): Promise<PromQLLabelsResponse> {
+    const { labelsPromQL } = await import("./facade/dashboards.js");
+    return labelsPromQL(this.client, this.database);
+  }
+
+  /** Returns the label sets of the series matching the given `match[]` selectors. */
+  async series(opts: PromQLSeriesOptions): Promise<PromQLSeriesResponse> {
+    const { seriesPromQL } = await import("./facade/dashboards.js");
+    return seriesPromQL(this.client, this.database, opts);
+  }
+}
+
+/**
  * A single database reached through an `ArcadeDBServer`. Constructed by
  * `ArcadeDBServer.db()`.
  *
@@ -53,21 +146,29 @@ export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown; re
  * transaction rather than auto-committing individually.
  */
 export class ArcadeDBDatabase {
-  /** Ingests and queries samples in a time-series type. */
-  readonly ts: TimeSeriesNamespace;
-  /** Grafana panel queries over a time-series type. */
-  readonly grafana: GrafanaNamespace;
-  /** A Prometheus-compatible query surface over a time-series type. */
-  readonly promql: PromQLNamespace;
+  private _ts: LazyTimeSeriesNamespace | undefined;
+  private _grafana: LazyGrafanaNamespace | undefined;
+  private _promql: LazyPromQLNamespace | undefined;
 
   constructor(
     private readonly client: RawClient,
     readonly name: string,
     private readonly sessionId?: string,
-  ) {
-    this.ts = new TimeSeriesNamespace(client, name);
-    this.grafana = new GrafanaNamespace(client, name);
-    this.promql = new PromQLNamespace(client, name);
+  ) {}
+
+  /** Ingests and queries samples in a time-series type. Loaded on first use; see `LazyTimeSeriesNamespace`. */
+  get ts(): LazyTimeSeriesNamespace {
+    return (this._ts ??= new LazyTimeSeriesNamespace(this.client, this.name));
+  }
+
+  /** Grafana panel queries over a time-series type. Loaded on first use; see `LazyGrafanaNamespace`. */
+  get grafana(): LazyGrafanaNamespace {
+    return (this._grafana ??= new LazyGrafanaNamespace(this.client, this.name));
+  }
+
+  /** A Prometheus-compatible query surface over a time-series type. Loaded on first use; see `LazyPromQLNamespace`. */
+  get promql(): LazyPromQLNamespace {
+    return (this._promql ??= new LazyPromQLNamespace(this.client, this.name));
   }
 
   /** Executes a read-or-write query and returns the whole result envelope - not just `result`. */
