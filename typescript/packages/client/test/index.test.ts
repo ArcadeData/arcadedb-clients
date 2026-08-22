@@ -106,6 +106,24 @@ describe("createClient / ArcadeDBServer", () => {
     ).rejects.toBeInstanceOf(ArcadeDBError);
   });
 
+  it("ready() carries the server's error body on a non-503 failure (M1)", async () => {
+    const fetchUnauthorized = vi.fn(async () => jsonResponse({ error: "Unauthorized" }, 401));
+    const server = createClient({ baseUrl: "https://example.com", fetch: fetchUnauthorized as unknown as typeof fetch });
+
+    let caught: unknown;
+    try {
+      await server.ready();
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ArcadeDBError);
+    expect((caught as ArcadeDBError).status).toBe(401);
+    // Every other facade method surfaces the body's `error`; ready() destructuring only
+    // `{ response }` and passing `undefined` as the body would drop it here alone.
+    expect((caught as ArcadeDBError).error).toBe("Unauthorized");
+  });
+
   it("db() returns an ArcadeDBDatabase carrying the given name", () => {
     const server = createClient({ baseUrl: "https://example.com", fetch: vi.fn() as unknown as typeof fetch });
     const db = server.db("mydb");

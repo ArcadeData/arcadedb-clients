@@ -16,13 +16,28 @@ export interface QueryOptions {
   language: QueryLanguage;
   command: string;
   params?: Record<string, unknown>;
+  /**
+   * Maximum number of rows to serialize into the response. When omitted, a `LIMIT` stated by the
+   * query is honored as written, and only a query stating none is capped by the server default
+   * (`arcadedb.server.httpQueryDefaultLimit`). Use `-1` for no cap. No value here can widen a
+   * single response past the server's hard ceiling (`arcadedb.server.httpQueryMaxResultRows`): a
+   * result that would exceed it is refused with 413 instead of being truncated - so raising this
+   * is not always the fix for a `truncated: true` response; see `QueryEnvelope`'s doc comment.
+   */
+  limit?: number;
 }
 
 /**
  * The whole result envelope `query`/`command` return - not just the rows.
- * `truncated` means the serializer's row cap stopped mid-serialization with
- * rows still pending, so `result` is incomplete: callers that only read
- * `result` and ignore `truncated` can silently work off a partial answer.
+ *
+ * `truncated` means the serializer's row cap stopped mid-serialization with rows still pending,
+ * so `result` is incomplete: callers that only read `result` and ignore `truncated` can silently
+ * work off a partial answer. `QueryResponse` has no `required` list in the generated schema, so
+ * every field the server sends is technically optional; when the server omits `truncated`, this
+ * client defaults it to `false` (`limit` defaults to `-1`, meaning "uncapped"). Both defaults are
+ * the most reassuring possible reading of "the server did not say" - they assert completeness the
+ * server itself never claimed. In practice the server always sends both today, but that is a
+ * property of the current implementation, not a guarantee this type enforces.
  */
 export type QueryEnvelope<T = unknown> = {
   result: T[];
@@ -44,13 +59,17 @@ function toEnvelope<T>(data: components["schemas"]["QueryResponse"]): QueryEnvel
  * Builds the JSON body shared by `/query` and `/command`. Only `params` is cast: it is typed
  * `Record<string, never>` in the generated schema (an openapi-typescript artifact for "untyped
  * object", not a real restriction), so a caller-supplied `Record<string, unknown>` needs a
- * narrow cast to satisfy it. `command` and `language` are passed through with their real types
- * and are NOT cast, so a contract change that renames or retypes either one still fails `tsc`
- * here instead of only failing on the wire - that structural check is the reason this generated
- * client exists.
+ * narrow cast to satisfy it. `command`, `language`, and `limit` are passed through with their
+ * real types and are NOT cast, so a contract change to any of them still fails `tsc` here instead
+ * of only failing on the wire - that structural check is the reason this generated client exists.
  */
-function buildBody(opts: QueryOptions): { command: string; language: string; params?: Record<string, never> } {
-  return { command: opts.command, language: opts.language, params: opts.params as Record<string, never> | undefined };
+function buildBody(opts: QueryOptions): { command: string; language: string; params?: Record<string, never>; limit?: number } {
+  return {
+    command: opts.command,
+    language: opts.language,
+    params: opts.params as Record<string, never> | undefined,
+    limit: opts.limit,
+  };
 }
 
 /** Attaches the session header when `sessionId` is set; omits it otherwise. */

@@ -289,12 +289,12 @@ export class ArcadeDBServer {
    * other failure still throws `ArcadeDBError`.
    */
   async ready(): Promise<boolean> {
-    const { response } = await this.raw.GET("/api/v1/ready", {});
+    const { error, response } = await this.raw.GET("/api/v1/ready", {});
     if (response.status === 503) {
       return false;
     }
     if (!response.ok) {
-      throw ArcadeDBError.fromResponse(response, undefined);
+      throw ArcadeDBError.fromResponse(response, error);
     }
     return true;
   }

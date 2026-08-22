@@ -43,6 +43,19 @@ describe("ArcadeDBDatabase.query", () => {
     });
   });
 
+  it("sends limit in the body when supplied (I11: QueryOptions.limit)", async () => {
+    let capturedBody: unknown;
+    const fetchMock = vi.fn(async (request: Request) => {
+      capturedBody = await request.clone().json();
+      return jsonResponse({ result: [], limit: 5, returned: 0, truncated: true }, 200);
+    });
+    const server = createClient({ baseUrl: "https://example.com", fetch: fetchMock as unknown as typeof fetch });
+
+    await server.db("mydb").query({ language: "sql", command: "SELECT FROM V", limit: 5 });
+
+    expect(capturedBody).toEqual({ language: "sql", command: "SELECT FROM V", limit: 5 });
+  });
+
   it("sends no arcadedb-session-id header outside a transaction", async () => {
     let capturedHeader: string | null = null;
     const fetchMock = vi.fn(async (request: Request) => {

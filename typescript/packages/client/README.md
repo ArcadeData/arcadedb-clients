@@ -65,7 +65,16 @@ interface QueryEnvelope<T> {
 rows to write - `result` is then a partial answer, not a short-but-complete one. A client that
 returned only `result` would hand back an array a caller cannot tell apart from a complete result
 set; the array looks the same shape either way. Always check `truncated` before treating `result`
-as the whole answer, and re-query with a narrower filter or a higher limit when it is `true`.
+as the whole answer, and re-query with a narrower filter or a higher `limit` (via
+`QueryOptions.limit`) when it is `true` - though a value large enough to exceed the server's hard
+ceiling (`arcadedb.server.httpQueryMaxResultRows`) is refused with 413 rather than truncated, so a
+narrower filter is the only fix once you're past that ceiling.
+
+`limit` and `truncated` in the envelope above both default when the server's response omits them
+(`limit` to `-1`, meaning uncapped; `truncated` to `false`) - `QueryResponse` has no required
+fields in the generated schema, so both are, strictly, optional on the wire. In practice the
+server always sends both today, but a caller relying on `truncated === false` as proof of
+completeness is trusting a client-side default, not a server guarantee.
 
 ## Transactions
 
@@ -116,6 +125,22 @@ These are two deliberately different contracts in one package. Use the facade fo
 of try/catch; use `raw` when you want to branch on `{ data, error }` without exceptions. Mixing
 assumptions about which one you're calling is the most common way to end up with an unhandled
 rejection or a silently ignored error.
+
+### Two things neither model catches
+
+Both of the above describe how a completed HTTP exchange is reported. Two failure modes happen
+before or after that exchange and are not translated into either model - a `catch` around a facade
+call, or an `error` check on `raw`, will not see an `ArcadeDBError` for these:
+
+- **A rejecting `fetch`** - DNS failure, connection refused, TLS error, an aborted request - throws
+  whatever the underlying `fetch` implementation throws (typically a `TypeError`), not
+  `ArcadeDBError`. There was no HTTP response to build one from.
+- **A 2xx response with an unparsable body** - the server answered successfully but the body is
+  not valid JSON - propagates a `SyntaxError` from the JSON parse, not `ArcadeDBError`, since
+  `unwrap` only inspects `response.ok` and never sees a parse failure on the success path.
+
+Neither is normalized into `ArcadeDBError` today; a `catch` around a facade call may see a
+`TypeError` or `SyntaxError` instead of the `ArcadeDBError` this README otherwise promises.
 
 ## `exists` cannot prove absence
 
