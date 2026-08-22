@@ -16,6 +16,24 @@ describe("ArcadeDBError", () => {
     expect(err.detail).toBe("Database 'foo' was not found");
   });
 
+  it("carries help and exceptionArgs from a parsed JSON body", () => {
+    const err = new ArcadeDBError(400, {
+      error: "Invalid parameter",
+      help: "See the SQL reference for valid syntax",
+      exceptionArgs: "arg0, arg1",
+    });
+
+    expect(err.help).toBe("See the SQL reference for valid syntax");
+    expect(err.exceptionArgs).toBe("arg0, arg1");
+  });
+
+  it("leaves help and exceptionArgs undefined when the body does not carry them", () => {
+    const err = new ArcadeDBError(404, { error: "Database not found" });
+
+    expect(err.help).toBeUndefined();
+    expect(err.exceptionArgs).toBeUndefined();
+  });
+
   it("carries requestId when supplied out of band (from the X-Request-Id response header)", () => {
     const err = new ArcadeDBError(404, { error: "Database not found" }, "req-abc-123");
 

@@ -9,6 +9,8 @@ interface ArcadeDBErrorBody {
   exception?: string;
   detail?: string;
   requestId?: string;
+  help?: string;
+  exceptionArgs?: string;
 }
 
 function stringOrUndefined(value: unknown): string | undefined {
@@ -25,6 +27,8 @@ function parseBody(body: unknown): ArcadeDBErrorBody {
     exception: stringOrUndefined(record.exception),
     detail: stringOrUndefined(record.detail),
     requestId: stringOrUndefined(record.requestId),
+    help: stringOrUndefined(record.help),
+    exceptionArgs: stringOrUndefined(record.exceptionArgs),
   };
 }
 
@@ -44,7 +48,22 @@ export class ArcadeDBError extends Error {
   readonly error?: string;
   readonly exception?: string;
   readonly detail?: string;
+  /**
+   * Correlation id for matching this failure against server logs. The
+   * server sets the `X-Request-Id` response header on every response,
+   * generating one when the client sent none, so this is populated
+   * unconditionally rather than only when the caller happened to send its
+   * own `X-Request-Id` request header.
+   */
   readonly requestId?: string;
+  /** Actionable guidance for handling this error, when the server supplied any. */
+  readonly help?: string;
+  /**
+   * Extra exception arguments, when the server supplied any. Despite the
+   * plural name, the contract types this as a plain string, not an array -
+   * passed through as-is rather than parsed or coerced.
+   */
+  readonly exceptionArgs?: string;
 
   constructor(status: number, body?: unknown, requestId?: string) {
     const parsed = parseBody(body);
@@ -56,6 +75,8 @@ export class ArcadeDBError extends Error {
     this.exception = parsed.exception;
     this.detail = parsed.detail;
     this.requestId = resolvedRequestId;
+    this.help = parsed.help;
+    this.exceptionArgs = parsed.exceptionArgs;
     // Restore the prototype chain: extending built-ins gets clobbered when
     // the target is transpiled to ES5, and costs nothing when it isn't.
     Object.setPrototypeOf(this, ArcadeDBError.prototype);
