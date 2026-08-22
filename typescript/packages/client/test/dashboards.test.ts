@@ -33,10 +33,11 @@ describe("db.grafana.query", () => {
 // The "narrows without a cast" claim is a compile-time property of `PromQLResult` being a real
 // discriminated union: `if (data.resultType === "vector") data.result` has type
 // `PromQLVectorSample[]` with no cast needed. That property is real - `PromQLResult`'s own doc
-// comment explains it, and `tsc` would reject a cast-free narrowing if it broke - but it is a
-// type-checker fact, not something these `if`/`throw` runtime checks below exercise. Deleting the
-// whole discriminated-union apparatus and replacing it with an untyped `any` would leave these
-// tests byte-identical at runtime and still green.
+// comment explains it - but nothing in THIS file checks it: `packages/client/tsconfig.json` only
+// `include`s "src", and the type-aware eslint block (`no-floating-promises` etc.) is scoped to
+// `packages/client/src/**/*.ts`, so test files here are never type-checked at all, let alone for
+// this specific narrowing. Deleting the whole discriminated-union apparatus and replacing it with
+// an untyped `any` would leave these tests byte-identical at runtime and still green.
 describe("db.promql.query", () => {
   it("returns the vector-branch payload (metric, value) when resultType is vector", async () => {
     const fetchMock = vi.fn(async () =>

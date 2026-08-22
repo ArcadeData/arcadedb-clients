@@ -59,10 +59,14 @@ describe("ArcadeDBError", () => {
 
   it("discards a non-JSON (string) body entirely, falling back to the default message", () => {
     // A string body is not "object", so parseBody's `typeof body !== "object"` guard drops it
-    // wholesale rather than reading properties off it - a change that instead read, say,
-    // `body.error` off a string primitive (`undefined`, no throw) would sail past a looser
-    // assertion. Asserting the exact fallback message, and every optional field as undefined,
-    // is what makes that distinction visible.
+    // wholesale rather than reading properties off it. This assertion does NOT prove the guard
+    // is load-bearing, though: none of the six fields parseBody extracts (error, exception,
+    // detail, requestId, help, exceptionArgs) collides with a name on String.prototype, so
+    // reading `body.error` off the raw string primitive - which is exactly what happens when a
+    // property is read on a primitive; JS auto-boxes it rather than throwing - would also come
+    // back `undefined` for every field. Removing the guard entirely leaves this test byte-for-byte
+    // green. It is kept for defensive clarity (and to avoid running six property reads against a
+    // primitive), not because this test demonstrates it changes the outcome.
     const err = new ArcadeDBError(502, "Bad Gateway from upstream proxy");
 
     expect(err.status).toBe(502);
