@@ -28,7 +28,10 @@ describe("basicAuth", () => {
     const result = middleware.onRequest?.(callbackParams(request));
     const finalRequest = (result ?? request) as Request;
 
-    expect(finalRequest.headers.get("Authorization")).toBe(`Basic ${btoa("root:playwithdata")}`);
+    // Hardcoded, not computed via btoa(...): computing the expectation with the same function
+    // production code calls is tautological and would stay green even if basicAuth mis-encoded
+    // non-ASCII input the same way btoa does on its own (see the non-ASCII test below).
+    expect(finalRequest.headers.get("Authorization")).toBe("Basic cm9vdDpwbGF5d2l0aGRhdGE=");
   });
 
   it("does not depend on Buffer: still works when Buffer is unavailable on globalThis", () => {
@@ -50,20 +53,44 @@ describe("basicAuth", () => {
       const result = middleware.onRequest?.(callbackParams(request));
       const finalRequest = (result ?? request) as Request;
 
-      expect(finalRequest.headers.get("Authorization")).toBe(`Basic ${btoa("root:playwithdata")}`);
+      expect(finalRequest.headers.get("Authorization")).toBe("Basic cm9vdDpwbGF5d2l0aGRhdGE=");
     } finally {
       globalWithBuffer.Buffer = originalBuffer;
     }
   });
 
-  it("encodes special characters in the credential the same way btoa does", () => {
+  it("encodes ASCII special characters in the credential correctly", () => {
     const middleware = basicAuth("user@example.com", "p@ss:word!");
     const request = new Request("https://example.com/api/v1/databases");
 
     const result = middleware.onRequest?.(callbackParams(request));
     const finalRequest = (result ?? request) as Request;
 
-    expect(finalRequest.headers.get("Authorization")).toBe(`Basic ${btoa("user@example.com:p@ss:word!")}`);
+    expect(finalRequest.headers.get("Authorization")).toBe("Basic dXNlckBleGFtcGxlLmNvbTpwQHNzOndvcmQh");
+  });
+
+  it("encodes a non-ASCII (Latin-1 range) password as UTF-8, not as btoa's raw Latin-1 octets", () => {
+    // btoa("root:pässwörd") on its own yields "cm9vdDpw5HNzd/ZyZA==" - the Latin-1 byte for "ä"
+    // (0xE4), not its UTF-8 encoding. That is the exact bug this test guards against.
+    const middleware = basicAuth("root", "pässwörd");
+    const request = new Request("https://example.com/api/v1/databases");
+
+    const result = middleware.onRequest?.(callbackParams(request));
+    const finalRequest = (result ?? request) as Request;
+
+    expect(finalRequest.headers.get("Authorization")).toBe("Basic cm9vdDpww6Rzc3fDtnJk");
+  });
+
+  it("encodes a non-ASCII (CJK) password without throwing", () => {
+    // btoa("root:密码") on its own throws a DOMException - characters above U+00FF are outside
+    // btoa's Latin-1 input range. basicAuth must not propagate that.
+    const middleware = basicAuth("root", "密码");
+    const request = new Request("https://example.com/api/v1/databases");
+
+    const result = middleware.onRequest?.(callbackParams(request));
+    const finalRequest = (result ?? request) as Request;
+
+    expect(finalRequest.headers.get("Authorization")).toBe("Basic cm9vdDrlr4bnoIE=");
   });
 });
 
