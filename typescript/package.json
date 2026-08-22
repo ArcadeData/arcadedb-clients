@@ -1,0 +1,29 @@
+{
+  "name": "@arcadedb/clients-root",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.ts",
+    "typecheck": "tsc --build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "e2e": "vitest run --config e2e/vitest.config.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "^20.19.43",
+    "esbuild": "0.28.2",
+    "eslint": "10.9.0",
+    "openapi-typescript": "7.13.0",
+    "testcontainers": "12.1.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "^4.1.11"
+  }
+}
