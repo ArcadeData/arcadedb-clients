@@ -1,0 +1,15 @@
+# Learn more: https://buf.build/docs/configuration/v2/buf-gen-yaml
+#
+# protobuf-es v2's protoc-gen-es emits both message types and service
+# descriptors from a single plugin, so no separate service-stub plugin is
+# needed here.
+version: v2
+plugins:
+  - local: protoc-gen-es
+    out: packages/client-grpc/src/gen
+    opt:
+      - target=ts
+      # This repository is ESM-only and relative imports need an explicit
+      # .js extension (see typescript/tsconfig.base.json: moduleResolution
+      # NodeNext), so the generated cross-file imports must carry it too.
+      - import_extension=js

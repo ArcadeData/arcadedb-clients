@@ -1,0 +1,15 @@
+# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+#
+# This module is language-agnostic: it describes the gRPC contract itself, not
+# any particular generated client. It lives at the repository root, beside
+# contracts/, for the same reason the OpenAPI contract does - a future Python
+# or Go gRPC client reads this same module.
+version: v2
+modules:
+  - path: contracts
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
