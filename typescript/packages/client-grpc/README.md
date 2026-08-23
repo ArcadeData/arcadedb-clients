@@ -83,11 +83,15 @@ createClient({ baseUrl: "http://localhost:50051", auth: passwordAuth("root", "pw
 // fine - you opted in
 ```
 
-Be aware of the limits of this check: it recognizes interceptors that `passwordAuth` itself
-produced (via an internal marker), not any interceptor that happens to set the same headers. A
-hand-rolled interceptor that sets `x-arcade-password` directly is not caught by this guard - the
-refusal is a safety net for the helper this package ships, not a general scan of outgoing
-metadata.
+Be aware of the limits of this check: it recognizes only the exact `Interceptor` value
+`passwordAuth` itself returned (via an internal marker on that value), not any interceptor that
+happens to set the same headers - and not any interceptor other than the one `passwordAuth`
+returned, including a wrapper around it. Composing `passwordAuth(...)` with another interceptor
+(logging, retry, call-recording) produces a new function value that does not carry the marker, so
+the refusal is silently skipped even though a real `passwordAuth` password is still being sent in
+plaintext underneath. A hand-rolled interceptor that sets `x-arcade-password` directly is not
+caught either. This check is a safety net for callers who pass `passwordAuth(...)` straight
+through as `auth`, not a general scan of outgoing metadata.
 
 ## Streaming queries: `streamQuery`
 
@@ -140,7 +144,7 @@ be easy to get wrong by hand:
 
 - one `session_id` (a fresh UUID), stable for the whole stream
 - `chunk_seq` starting at 1 and incrementing by 1 per chunk
-- `database` set on the first chunk only (the server caches it for the rest of the session)
+- `database` set on the first chunk only, per the `.proto` contract
 - `last: true` on the final chunk only
 
 An empty `chunks` iterable is not an error. A filter that matched nothing is a legitimate reason
@@ -153,15 +157,17 @@ as an all-zero summary) - it does not invent a summary itself.
 ### The `InsertOptions.database` workaround
 
 `insertStream` also sets `options.database` to the same value as the first chunk's `database`.
-This is a workaround, not part of the wire contract as documented: `InsertChunk.database` is
-marked `// REQUIRED` on the first chunk in `arcadedb-server.proto`, but the server's
-`InsertContext` construction only reads `InsertOptions.database` - it never looks at
-`InsertChunk.database` at all. Without this mirroring, every stream fails at the deferred commit
-with `Invalid database name: name is required`, even though `database` was sent exactly as the
-contract specifies. See [ArcadeData/arcadedb#6597](https://github.com/ArcadeData/arcadedb/issues/6597).
-This mirroring is removable once that issue is fixed server-side; until then, it is what makes
-`insertStream` work against the server as it actually behaves today, not as the `.proto` alone
-promises.
+This is a compatibility workaround for servers older than the fix for
+[ArcadeData/arcadedb#6597](https://github.com/ArcadeData/arcadedb/issues/6597) (merged in
+`7ccade7348`, not yet in a release as of this writing): `InsertChunk.database` is marked
+`// REQUIRED` on the first chunk in `arcadedb-server.proto`, but on 26.9.1 and every earlier
+release the server's `InsertContext` construction only reads `InsertOptions.database` - it never
+looks at `InsertChunk.database` at all. Without this mirroring, every stream against such a server
+fails at the deferred commit with `Invalid database name: name is required`, even though `database`
+was sent exactly as the contract specifies. A server carrying the #6597 fix prefers a non-empty
+`InsertChunk.database` and falls back to `InsertOptions.database`, so setting both to the same
+value here can never disagree - this mirroring is safe to keep sending even after the fix ships,
+and is what makes `insertStream` work against every server this package supports, fixed or not.
 
 ## Transactions: `transaction`
 
@@ -175,11 +181,19 @@ const totalRow = await grpc.transaction("mydb", async (tx) => {
 
 `transaction` begins a server-side transaction, hands the callback a `TransactionHandle` whose
 calls (`executeQuery`, `executeCommand`, `createRecord`, `updateRecord`, `deleteRecord`,
-`lookupByRid`, `bulkInsert`, `streamQuery`, `insertStream`) all carry the transaction's id
-automatically, and ends the transaction on both the success and failure paths: the callback
-resolving commits, the callback throwing or rejecting rolls back and re-throws the callback's own
-error. This is the safety net against forgetting, dropping, or mismatching a transaction id by
-hand - the exact class of defect a 2026 gRPC audit found three times in ad hoc transaction code.
+`lookupByRid`, `streamQuery`) all carry the transaction's id automatically, and ends the
+transaction on both the success and failure paths: the callback resolving commits, the callback
+throwing or rejecting rolls back and re-throws the callback's own error. This is the safety net
+against forgetting, dropping, or mismatching a transaction id by hand - the exact class of defect
+a 2026 gRPC audit found three times in ad hoc transaction code.
+
+A resolved `commitTransaction` call is not, by itself, proof of a commit: the server answers a
+transaction id it no longer recognises (for example, one reaped after sitting idle past the
+server's idle timeout) with `success=true, committed=false` and no error status at all. `transaction`
+reads `committed` and throws - including the server's own message - rather than reporting success
+for a transaction whose writes were silently lost. `beginTransaction`'s response is checked the
+same way: a missing or blank transaction id throws immediately instead of running the callback
+against a handle that would silently auto-commit every statement.
 
 `beginTransaction`, `commitTransaction`, and `rollbackTransaction` are the calls `transaction`
 manages for you; the `.proto` contract also lets a request carry inline `begin` / `commit` flags
@@ -188,15 +202,29 @@ on individual RPCs, so a call can begin or end a transaction as a side effect wi
 flags - they are reachable through `grpc.raw` for callers who want that shape, but `transaction`
 only ever manages transactions the explicit way.
 
+### `bulkInsert` and `insertStream` cannot join a `transaction()` on this server
+
+`TransactionHandle` deliberately does **not** include `bulkInsert` or `insertStream`. On this
+server, `ArcadeDbGrpcService#bulkInsert` and `#insertStream` never read the request's transaction
+context at all: each builds its own `InsertContext`, which resolves its own `Database` and commits
+independently, regardless of any `BeginTransaction`/`CommitTransaction`/`RollbackTransaction` the
+caller issued around it. Binding them into a `TransactionHandle` would silently lie about this:
+their writes are **not** part of the transaction, they commit even when the transaction's callback
+throws, and they survive a rollback. Both remain available outside a transaction -
+`grpc.insertStream`/`grpc.raw.insertStream` and `grpc.raw.bulkInsert` - but never through `tx`. See
+[ArcadeData/arcadedb#6607](https://github.com/ArcadeData/arcadedb/issues/6607), filed against this
+gap; this restriction is removable once that lands server-side.
+
 ## The admin service is not a supported path
 
 The `.proto` contract also defines `ArcadeDbAdminService` (`Ping`, `GetServerInfo`,
 `ListDatabases`, `ExistsDatabase`, `CreateDatabase`, `DropDatabase`, `GetDatabaseInfo`,
 `CreateUser`, `DeleteUser`). `createClient` does not wire up a client for it, and this package
-does not export one. It is generated from the same contract as the data plane
-(`contracts/arcadedb-server-<version>.proto`), so it remains reachable - generate your own
-Connect client against that `.proto` the same way this package's own `raw` client is generated -
-but it is not something this package hands you.
+does not export one. There is no deep import that gets you one either: the `exports` map in
+`package.json` exposes only this package's own entry point, so `@arcadedb/client-grpc/gen/...` is
+not a reachable path for an installed copy. If you need it, generate your own Connect client
+against `contracts/arcadedb-server-<version>.proto` the same way this package's own `raw` client
+is generated - the `.proto` is a plain source file, not something only this package can read.
 
 The reason is its auth model, not an oversight: every `ArcadeDbAdminService` RPC authenticates
 from a `credentials` field inside the request message itself, rather than from gRPC metadata the
