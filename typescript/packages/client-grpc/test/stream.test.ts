@@ -88,6 +88,29 @@ describe("streamQuery", () => {
     expect(seenRequest?.retrievalMode).toBe(StreamQueryRequest_RetrievalMode.PAGED);
     expect(seenRequest?.batchSize).toBe(250);
   });
+
+  it("does not default retrievalMode or batchSize when the caller omits them (T2)", async () => {
+    // The previous version of this test supplied both fields, so it could not tell "passed
+    // through unchanged" from "a default happens to match what was supplied" - adding a default
+    // of PAGED/250 would still have left it green. Omitting both and asserting `undefined` proves
+    // this wrapper genuinely never picks a value on the caller's behalf.
+    let seenRequest: MessageInitShape<typeof StreamQueryRequestSchema> | undefined;
+
+    const raw = {
+      streamQuery: (request: MessageInitShape<typeof StreamQueryRequestSchema>) => {
+        seenRequest = request;
+        return (async function* () {})();
+      },
+    };
+    const streamQuery = createStreamQuery(raw);
+
+    const request = { database: "mydb", query: "SELECT FROM V" };
+    const rows = streamQuery(request);
+    for (let step = await rows.next(); !step.done; step = await rows.next());
+
+    expect(seenRequest?.retrievalMode).toBeUndefined();
+    expect(seenRequest?.batchSize).toBeUndefined();
+  });
 });
 
 describe("insertStream", () => {
@@ -202,5 +225,37 @@ describe("insertStream", () => {
     expect(sent[0]?.last).toBe(true);
     expect(sent[0]?.database).toBe("mydb");
     expect(result).toBe(summary);
+  });
+
+  it("finalizes the caller's chunk iterator when the RPC consumption aborts mid-stream (I3)", async () => {
+    // `envelopeChunks` pulls the caller's async iterator manually (not via `for await...of`), so
+    // without an explicit try/finally an abandoned RPC never runs the caller's `finally` - file
+    // handles, DB cursors, etc. behind a caller-supplied generator would leak. Simulating an
+    // aborted RPC by calling `.return()` on the enveloped stream after only a partial read proves
+    // that abandonment propagates back to the caller's own iterator.
+    let cleanedUp = false;
+    async function* rows(): AsyncGenerator<InsertChunk["rows"]> {
+      try {
+        yield [{ rid: "", type: "V", properties: {} }];
+        yield [{ rid: "", type: "V", properties: {} }];
+        yield [{ rid: "", type: "V", properties: {} }];
+      } finally {
+        cleanedUp = true;
+      }
+    }
+
+    const raw = {
+      insertStream: async (request: AsyncIterable<InsertChunk>): Promise<InsertSummary> => {
+        const iterator = request[Symbol.asyncIterator]();
+        await iterator.next(); // consume only the first envelope chunk
+        await iterator.return?.(); // simulate the RPC aborting mid-stream
+        return insertSummary();
+      },
+    };
+    const insertStream = createInsertStream(raw);
+
+    await insertStream({ database: "mydb", chunks: rows() });
+
+    expect(cleanedUp).toBe(true);
   });
 });
