@@ -3,6 +3,10 @@
 A TypeScript/JavaScript HTTP client for [ArcadeDB](https://arcadedb.com), generated from ArcadeDB's
 OpenAPI contract.
 
+If your workload is throughput-sensitive server-to-server streaming instead - large query result
+sets, bulk inserts - see [`@arcadedb/client-grpc`](../client-grpc/README.md), which streams
+natively over gRPC rather than paging through repeated HTTP calls.
+
 **This package is not yet published to npm.** The instructions below describe how it will be
 installed and used once a release is made; until then, consume it from this repository (workspace
 link or `npm pack`).

@@ -1,38 +1,46 @@
 # arcadedb-clients
 
-Language clients for [ArcadeDB](https://arcadedb.com)'s HTTP API, generated from one shared OpenAPI
-contract and kept in sync with it by CI.
+Language clients for [ArcadeDB](https://arcadedb.com)'s HTTP and gRPC APIs, generated from shared
+OpenAPI and Protobuf contracts and kept in sync with them by CI.
 
-The idea: one contract, many language clients. `contracts/` holds the OpenAPI spec that every
-client in every language this repository will ever host is generated from. A client's own package
-never hand-edits its generated types - the contract is the single source of truth, and each
-client's build regenerates from it and fails the build (a "drift gate") if the checked-in generated
-code and a fresh regeneration disagree.
+The idea: one contract per API, many language clients. `contracts/` holds the OpenAPI spec and the
+Protobuf `.proto` that every client in every language this repository will ever host is generated
+from. A client's own package never hand-edits its generated types - the contract is the single
+source of truth, and each client's build regenerates from it and fails the build (a "drift gate")
+if the checked-in generated code and a fresh regeneration disagree.
 
 ## Layout
 
-- `contracts/` - the OpenAPI contract(s), fetched by `scripts/fetch-contract.sh` and committed.
-- `typescript/` - `@arcadedb/client`, the TypeScript/JavaScript HTTP client. See
-  `typescript/packages/client/README.md` for usage.
-- `scripts/fetch-contract.sh` - fetches the contract from a released ArcadeDB version or a running
-  Docker image, normalizes it, and writes it into `contracts/`.
+- `contracts/` - the OpenAPI and Protobuf contracts, fetched by `scripts/fetch-contract.sh` and
+  committed.
+- `typescript/` - two TypeScript/JavaScript clients, sharing one toolchain and one CI job:
+  - `@arcadedb/client`, the HTTP client. See `typescript/packages/client/README.md` for usage.
+  - `@arcadedb/client-grpc`, the gRPC client. See `typescript/packages/client-grpc/README.md` for
+    usage, including why it has no browser build.
+- `scripts/fetch-contract.sh` - fetches the OpenAPI contract from a released ArcadeDB version or a
+  running Docker image, or copies the Protobuf contract out of a local `arcadedb` checkout, and
+  writes the result into `contracts/`. See "The contracts" below.
 
 `python/`, `go/`, and other language directories will appear here as siblings of `typescript/` as
 this repository grows; none exist yet.
 
-## The contract
+## The contracts
 
-`scripts/fetch-contract.sh` has two modes:
+`scripts/fetch-contract.sh` has three modes:
 
 ```bash
-scripts/fetch-contract.sh --release <tag>    # download + checksum-verify a GitHub release asset
-scripts/fetch-contract.sh --image <docker-tag>  # start the image, fetch /api/v1/openapi.json
+scripts/fetch-contract.sh --release <tag>          # download + checksum-verify a GitHub release asset (OpenAPI)
+scripts/fetch-contract.sh --image <docker-tag>      # start the image, fetch /api/v1/openapi.json (OpenAPI)
+scripts/fetch-contract.sh --proto-from <checkout>   # copy arcadedb-server.proto out of a local arcadedb checkout
 ```
 
-Either way, the resulting spec is refused unless it is structurally provably post-M0 (checked via a
-marker that cannot be true of any pre-M0 spec: the `/api/v1/begin/{database}` 204 response carrying
-the `arcadedb-session-id` header). A version string alone proves nothing about a spec's content, so
-the script does not trust one.
+In the `--release` and `--image` modes, the resulting OpenAPI spec is refused unless it is
+structurally provably post-M0 (checked via a marker that cannot be true of any pre-M0 spec: the
+`/api/v1/begin/{database}` 204 response carrying the `arcadedb-session-id` header). A version
+string alone proves nothing about a spec's content, so the script does not trust one. The `.proto`
+contract has no equivalent marker to check against - a running server has no endpoint that serves
+it, so `--proto-from` is a straight file copy out of a local `arcadedb` checkout rather than a
+download.
 
 ## Development
 
