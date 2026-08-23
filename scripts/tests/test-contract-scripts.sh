@@ -20,6 +20,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPTS_DIR/.." && pwd)"
 
 PASS=0
 FAIL=0
@@ -202,6 +203,45 @@ check "$after" "$before" "re-adopting the current version changes nothing"
 "$FIX/scripts/adopt-contract-version.sh" 99.9.9-NOPE >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses a version whose contracts were never fetched"
 rm -rf "$FIX"
+
+echo "contract-watch.yml wiring"
+
+# The script gaining a capability and the workflow USING it are two different
+# facts, and the suite above only establishes the first. When --proto-from grew
+# an explicit version argument, every one of those tests passed while the sole
+# caller still omitted it - so the deadlock they were written to prevent was
+# still live in production, and the tests could not see it.
+#
+# These assertions read the workflow itself. They are the only thing here that
+# fails when the capability is wired up but not called.
+WATCH="$REPO_ROOT/.github/workflows/contract-watch.yml"
+if [[ -f "$WATCH" ]]; then
+  proto_call="$(grep -E '^\s*\./scripts/fetch-contract\.sh --proto-from' "$WATCH" || true)"
+  if [[ -n "$proto_call" ]] && [[ "$proto_call" =~ --proto-from[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+ ]]; then
+    ok "the workflow passes an explicit version to --proto-from"
+  else
+    bad "the workflow passes an explicit version to --proto-from (found: ${proto_call:-<no call>})"
+  fi
+
+  adopt_call="$(grep -E '^\s*\./scripts/adopt-contract-version\.sh' "$WATCH" || true)"
+  if [[ -n "$adopt_call" ]] && [[ "$adopt_call" =~ adopt-contract-version\.sh[[:space:]]+[^[:space:]]+ ]]; then
+    ok "the workflow passes a version to adopt-contract-version.sh"
+  else
+    bad "the workflow passes a version to adopt-contract-version.sh (found: ${adopt_call:-<no call>})"
+  fi
+
+  # The order is load-bearing: adopting a version asserts its proto already
+  # exists, so a refresh that adopted before fetching could never complete.
+  fetch_line="$(grep -n -- '--proto-from' "$WATCH" | head -1 | cut -d: -f1)"
+  adopt_line="$(grep -n -- 'adopt-contract-version.sh' "$WATCH" | head -1 | cut -d: -f1)"
+  if [[ -n "$fetch_line" && -n "$adopt_line" ]] && (( fetch_line < adopt_line )); then
+    ok "the workflow fetches the proto before adopting the version"
+  else
+    bad "the workflow fetches the proto before adopting the version"
+  fi
+else
+  bad "contract-watch.yml is readable from the test harness"
+fi
 
 echo "report-contract-watch.sh (pure functions, no gh)"
 

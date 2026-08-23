@@ -122,7 +122,11 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/fetch-contract.sh --image "${{ steps.version.outputs.image }}"
-          ./scripts/fetch-contract.sh --proto-from .arcadedb
+          # The version is passed EXPLICITLY: --image has just written the new
+          # OpenAPI spec beside the old one, so deriving a version by insisting on
+          # exactly one spec would abort here, during a bump - the one case this
+          # job exists for.
+          ./scripts/fetch-contract.sh --proto-from .arcadedb "${{ steps.version.outputs.version }}"
           ./scripts/adopt-contract-version.sh "${{ steps.version.outputs.version }}"
 
       - name: Regenerate
