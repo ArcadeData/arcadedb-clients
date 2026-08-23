@@ -8,12 +8,30 @@ on:
       - "typescript/**"
       - "contracts/**"
       - "scripts/**"
+      # Root files this workflow's own gates read. `generate:grpc` runs
+      # `buf generate --template buf.gen.yaml ..`, so the root `buf.yaml` is the
+      # module config the drift gate regenerates from - a change to it alters the
+      # generated output while leaving every path above untouched. `.gitignore`
+      # matters for the same reason: the drift gate's untracked-file half is a
+      # `git status --porcelain` over the generated directories, which an ignore
+      # rule covering them would silence permanently and invisibly.
+      - "buf.yaml"
+      - ".gitignore"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "typescript/**"
       - "contracts/**"
       - "scripts/**"
+      # Root files this workflow's own gates read. `generate:grpc` runs
+      # `buf generate --template buf.gen.yaml ..`, so the root `buf.yaml` is the
+      # module config the drift gate regenerates from - a change to it alters the
+      # generated output while leaving every path above untouched. `.gitignore`
+      # matters for the same reason: the drift gate's untracked-file half is a
+      # `git status --porcelain` over the generated directories, which an ignore
+      # rule covering them would silence permanently and invisibly.
+      - "buf.yaml"
+      - ".gitignore"
       - ".github/workflows/ci.yml"
 
 jobs:
