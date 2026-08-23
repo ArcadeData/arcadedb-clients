@@ -10,7 +10,7 @@
   },
   "scripts": {
     "generate": "npm run generate:http && npm run generate:grpc",
-    "generate:http": "openapi-typescript ../contracts/arcadedb-openapi-*.json -o packages/client/src/generated/schema.ts",
+    "generate:http": "SPEC=\"$(../scripts/resolve-openapi-contract.sh)\" && openapi-typescript \"$SPEC\" -o packages/client/src/generated/schema.ts",
     "generate:grpc": "buf generate --template buf.gen.yaml ..",
     "typecheck": "tsc --build",
     "lint": "eslint .",

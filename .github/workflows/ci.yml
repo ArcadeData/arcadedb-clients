@@ -53,6 +53,12 @@ jobs:
         working-directory: typescript
         run: npm ci
 
+      # The contract scripts guard failures that are invisible while they happen:
+      # generating from a stale contract, and a half-applied version bump. They
+      # run before the drift gate because the drift gate now depends on them.
+      - name: Contract script tests
+        run: ./scripts/tests/test-contract-scripts.sh
+
       - name: Regenerate types and verify no drift
         working-directory: typescript
         run: |

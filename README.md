@@ -30,8 +30,8 @@ this repository grows; none exist yet.
 
 ```bash
 scripts/fetch-contract.sh --release <tag>          # download + checksum-verify a GitHub release asset (OpenAPI)
-scripts/fetch-contract.sh --image <docker-tag>      # start the image, fetch /api/v1/openapi.json (OpenAPI)
-scripts/fetch-contract.sh --proto-from <checkout>   # copy arcadedb-server.proto out of a local arcadedb checkout
+scripts/fetch-contract.sh --image <image-reference> # start the image, fetch /api/v1/openapi.json (OpenAPI)
+scripts/fetch-contract.sh --proto-from <checkout> [<version>]  # copy arcadedb-server.proto out of a local arcadedb checkout
 ```
 
 In the `--release` and `--image` modes, the resulting OpenAPI spec is refused unless it is
