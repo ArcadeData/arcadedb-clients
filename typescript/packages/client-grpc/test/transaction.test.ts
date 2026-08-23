@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CallOptions } from "@connectrpc/connect";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 import type {
   BeginTransactionRequestSchema,
@@ -21,15 +22,30 @@ type ExecuteQueryRequest = MessageInitShape<typeof ExecuteQueryRequestSchema>;
 
 /** Records every call made through a fake `raw` client, mimicking the subset of
  * `Client<typeof ArcadeDbService>` the transaction wrapper touches. */
-function mockRaw(opts: { transactionId?: string; commitFails?: boolean } = {}) {
-  const { transactionId = "tx-123", commitFails = false } = opts;
+function mockRaw(
+  opts: {
+    transactionId?: string;
+    commitFails?: boolean;
+    committed?: boolean;
+    commitMessage?: string;
+    rollbackFails?: boolean;
+  } = {},
+) {
+  const {
+    transactionId = "tx-123",
+    commitFails = false,
+    committed = true,
+    commitMessage = "",
+    rollbackFails = false,
+  } = opts;
 
   const calls: {
     begin: BeginRequest[];
     commit: CommitRequest[];
     rollback: RollbackRequest[];
     executeQuery: ExecuteQueryRequest[];
-  } = { begin: [], commit: [], rollback: [], executeQuery: [] };
+    executeQueryOptions: (CallOptions | undefined)[];
+  } = { begin: [], commit: [], rollback: [], executeQuery: [], executeQueryOptions: [] };
 
   const raw = {
     beginTransaction: async (request: BeginRequest): Promise<BeginResponse> => {
@@ -39,14 +55,16 @@ function mockRaw(opts: { transactionId?: string; commitFails?: boolean } = {}) {
     commitTransaction: async (request: CommitRequest): Promise<CommitResponse> => {
       calls.commit.push(request);
       if (commitFails) throw new Error("commit failed");
-      return { success: true, committed: true, message: "", timestamp: 0n };
+      return { success: true, committed, message: commitMessage, timestamp: 0n };
     },
     rollbackTransaction: async (request: RollbackRequest): Promise<RollbackResponse> => {
       calls.rollback.push(request);
+      if (rollbackFails) throw new Error("rollback failed");
       return { success: true, rolledBack: true, message: "" };
     },
-    executeQuery: async (request: ExecuteQueryRequest) => {
+    executeQuery: async (request: ExecuteQueryRequest, options?: CallOptions) => {
       calls.executeQuery.push(request);
+      calls.executeQueryOptions.push(options);
       return { results: [], executionTimeMs: 0n, queryPlan: "" };
     },
     executeCommand: async (request: unknown) => {
@@ -104,6 +122,48 @@ describe("transaction", () => {
     }
   });
 
+  it("binds the full transaction context - database on the request and on transaction.database, not only transactionId", async () => {
+    const { raw, calls } = mockRaw({ transactionId: "tx-abc" });
+    const transaction = createTransaction(raw);
+
+    await transaction("mydb", async (tx) => {
+      await tx.executeQuery({ query: "SELECT FROM V" });
+    });
+
+    expect(calls.executeQuery[0]?.database).toBe("mydb");
+    expect(calls.executeQuery[0]?.transaction?.database).toBe("mydb");
+    expect(calls.executeQuery[0]?.transaction?.transactionId).toBe("tx-abc");
+  });
+
+  it("overrides a caller-supplied database/transaction rather than trusting it (anti-hijack)", async () => {
+    const { raw, calls } = mockRaw({ transactionId: "tx-abc" });
+    const transaction = createTransaction(raw);
+
+    await transaction("mydb", async (tx) => {
+      await tx.executeQuery({
+        query: "SELECT FROM V",
+        database: "some-other-db",
+        transaction: { transactionId: "hijacked-tx-id", database: "some-other-db" },
+      });
+    });
+
+    expect(calls.executeQuery[0]?.database).toBe("mydb");
+    expect(calls.executeQuery[0]?.transaction?.database).toBe("mydb");
+    expect(calls.executeQuery[0]?.transaction?.transactionId).toBe("tx-abc");
+  });
+
+  it("passes CallOptions through to the underlying raw call unchanged", async () => {
+    const { raw, calls } = mockRaw();
+    const transaction = createTransaction(raw);
+    const options: CallOptions = { timeoutMs: 5_000 };
+
+    await transaction("mydb", async (tx) => {
+      await tx.executeQuery({ query: "SELECT FROM V" }, options);
+    });
+
+    expect(calls.executeQueryOptions[0]).toBe(options);
+  });
+
   it("commits on normal return and does not roll back", async () => {
     const { raw, calls } = mockRaw();
     const transaction = createTransaction(raw);
@@ -149,6 +209,24 @@ describe("transaction", () => {
     expect(calls.commit).toHaveLength(0);
   });
 
+  it("issues a best-effort rollback and surfaces the COMMIT error (not the rollback's) when both commit and rollback fail (T3)", async () => {
+    // T3: mockRaw's rollback used to always resolve, so this test could not tell a real
+    // best-effort rollback (try/catch around safeRollback's own call) from having no try/catch at
+    // all - deleting safeRollback's try/catch left it green. Making rollback itself reject proves
+    // the rollback failure is swallowed and the commit error still surfaces.
+    const { raw, calls } = mockRaw({ commitFails: true, rollbackFails: true });
+    const transaction = createTransaction(raw);
+
+    await expect(
+      transaction("mydb", async (tx) => {
+        await tx.executeQuery({ query: "SELECT FROM V" });
+      }),
+    ).rejects.toThrow("commit failed");
+
+    expect(calls.commit).toHaveLength(1);
+    expect(calls.rollback).toHaveLength(1);
+  });
+
   it("issues a best-effort rollback and surfaces the commit error when commit fails", async () => {
     const { raw, calls } = mockRaw({ commitFails: true });
     const transaction = createTransaction(raw);
@@ -161,5 +239,104 @@ describe("transaction", () => {
 
     expect(calls.commit).toHaveLength(1);
     expect(calls.rollback).toHaveLength(1);
+  });
+
+  it("throws when the server answers success with committed=false, including the server's message (C2)", async () => {
+    // The server answers a stale/reaped transaction id with success=true, committed=false and NO
+    // error status - a resolved commitTransaction() promise is not proof the transaction actually
+    // committed. See ArcadeDbGrpcService.java:1660-1670.
+    const { raw, calls } = mockRaw({ committed: false, commitMessage: "No active transaction for id=tx-123" });
+    const transaction = createTransaction(raw);
+
+    await expect(
+      transaction("mydb", async (tx) => {
+        await tx.executeQuery({ query: "SELECT FROM V" });
+      }),
+    ).rejects.toThrow(/No active transaction for id=tx-123/);
+
+    expect(calls.commit).toHaveLength(1);
+  });
+
+  it("throws when beginTransaction returns a missing transaction id (I2)", async () => {
+    const { raw } = mockRaw({ transactionId: "" });
+    const transaction = createTransaction(raw);
+
+    await expect(
+      transaction("mydb", async (tx) => {
+        await tx.executeQuery({ query: "SELECT FROM V" });
+      }),
+    ).rejects.toThrow(/transaction id/i);
+  });
+
+  it("throws when beginTransaction returns a blank (whitespace-only) transaction id (I2)", async () => {
+    const { raw } = mockRaw({ transactionId: "   " });
+    const transaction = createTransaction(raw);
+
+    await expect(
+      transaction("mydb", async (tx) => {
+        await tx.executeQuery({ query: "SELECT FROM V" });
+      }),
+    ).rejects.toThrow(/transaction id/i);
+  });
+
+  describe("cause attachment when both the body throws and the rollback fails (I5)", () => {
+    it("attaches the rollback failure as `cause` on the body's error", async () => {
+      const { raw } = mockRaw({ rollbackFails: true });
+      const transaction = createTransaction(raw);
+      const originalError = new Error("the caller's real failure");
+
+      let caught: unknown;
+      try {
+        await transaction("mydb", async () => {
+          throw originalError;
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBe(originalError);
+      expect((caught as Error).cause).toBeInstanceOf(Error);
+      expect(((caught as Error).cause as Error).message).toBe("rollback failed");
+    });
+
+    it("surfaces a frozen error as itself, not a TypeError, when the rollback also fails", async () => {
+      // A frozen Error is non-extensible: `err.cause = rollbackErr` throws
+      // `TypeError: Cannot add property cause, object is not extensible` in strict-mode ESM.
+      const { raw } = mockRaw({ rollbackFails: true });
+      const transaction = createTransaction(raw);
+      const boom = Object.freeze(new Error("frozen sentinel failure"));
+
+      let caught: unknown;
+      try {
+        await transaction("mydb", async () => {
+          throw boom;
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBe(boom);
+      expect((caught as Error).message).toBe("frozen sentinel failure");
+      expect((caught as Error).cause).toBeUndefined();
+    });
+
+    it("does not overwrite a caller-set cause when the rollback also fails", async () => {
+      const { raw } = mockRaw({ rollbackFails: true });
+      const transaction = createTransaction(raw);
+      const originalCause = new Error("the caller's own causal chain");
+      const boom = new Error("the caller's real failure", { cause: originalCause });
+
+      let caught: unknown;
+      try {
+        await transaction("mydb", async () => {
+          throw boom;
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBe(boom);
+      expect((caught as Error).cause).toBe(originalCause);
+    });
   });
 });

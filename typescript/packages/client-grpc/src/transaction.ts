@@ -2,7 +2,7 @@ import type { CallOptions, Client } from "@connectrpc/connect";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 import type { ArcadeDbService } from "./gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
 import { TransactionContextSchema } from "./gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
-import { createInsertStream, createStreamQuery } from "./stream.js";
+import { createStreamQuery } from "./stream.js";
 
 /** The generated Connect client for `com.arcadedb.grpc.ArcadeDbService`. */
 type RawClient = Client<typeof ArcadeDbService>;
@@ -15,6 +15,16 @@ type TransactionContextInit = MessageInitShape<typeof TransactionContextSchema>;
  * `transaction` itself. Deliberately excludes `beginTransaction` / `commitTransaction` /
  * `rollbackTransaction` (owned by the wrapper) and the two RPCs the design spec keeps
  * unwrapped (`insertBidirectional`, `graphBatchLoad` - reachable, unwrapped, via `client.raw`).
+ *
+ * Also excludes `bulkInsert` and `insertStream`: on this server, `ArcadeDbGrpcService#bulkInsert`
+ * and `#insertStream` never read the request's transaction context at all - each builds its own
+ * `InsertContext`, which resolves its own `Database` and commits on its own, independent of any
+ * `BeginTransaction`/`CommitTransaction`/`RollbackTransaction` the caller issued. Binding them
+ * here would silently lie: their writes are NOT part of the transaction, survive a rollback, and
+ * commit even when the callback throws. Both remain reachable outside a transaction: `insertStream`
+ * via `client.insertStream` (or `client.raw.insertStream`), `bulkInsert` via `client.raw.bulkInsert`.
+ * See [ArcadeData/arcadedb#6607](https://github.com/ArcadeData/arcadedb/issues/6607); this exclusion
+ * can be removed once that lands server-side.
  */
 export interface TransactionHandle {
   executeQuery: RawClient["executeQuery"];
@@ -23,11 +33,8 @@ export interface TransactionHandle {
   updateRecord: RawClient["updateRecord"];
   deleteRecord: RawClient["deleteRecord"];
   lookupByRid: RawClient["lookupByRid"];
-  bulkInsert: RawClient["bulkInsert"];
   /** See {@link createStreamQuery}; bound to this transaction. */
   streamQuery: ReturnType<typeof createStreamQuery>;
-  /** See {@link createInsertStream}; bound to this transaction. */
-  insertStream: ReturnType<typeof createInsertStream>;
 }
 
 /**
@@ -44,17 +51,6 @@ function bindTransaction<T extends { database?: string; transaction?: Transactio
   return { ...request, database, transaction: { transactionId, database } };
 }
 
-/** Same as {@link bindTransaction}, but for the per-chunk stream `insertStream` sends. */
-async function* bindTransactionToChunks<T extends { transaction?: TransactionContextInit }>(
-  chunks: AsyncIterable<T>,
-  database: string,
-  transactionId: string,
-): AsyncGenerator<T> {
-  for await (const chunk of chunks) {
-    yield { ...chunk, transaction: { transactionId, database } };
-  }
-}
-
 function createHandle(raw: RawClient, database: string, transactionId: string): TransactionHandle {
   const bound = <T extends { database?: string; transaction?: TransactionContextInit }, R>(
     call: (request: T, options?: CallOptions) => R,
@@ -62,13 +58,9 @@ function createHandle(raw: RawClient, database: string, transactionId: string): 
     return (request: T, options?: CallOptions): R => call(bindTransaction(request, database, transactionId), options);
   };
 
-  // `streamQuery`/`insertStream`'s ergonomic wrappers (batch flattening, chunk envelope
-  // bookkeeping) are reused as-is; only the underlying raw calls they forward to are bound to
-  // this transaction.
+  // `streamQuery`'s ergonomic wrapper (batch flattening) is reused as-is; only the underlying raw
+  // call it forwards to is bound to this transaction.
   const streamRaw: Parameters<typeof createStreamQuery>[0] = { streamQuery: bound(raw.streamQuery) };
-  const insertStreamRaw: Parameters<typeof createInsertStream>[0] = {
-    insertStream: (chunks, options) => raw.insertStream(bindTransactionToChunks(chunks, database, transactionId), options),
-  };
 
   return {
     executeQuery: bound(raw.executeQuery),
@@ -77,9 +69,7 @@ function createHandle(raw: RawClient, database: string, transactionId: string): 
     updateRecord: bound(raw.updateRecord),
     deleteRecord: bound(raw.deleteRecord),
     lookupByRid: bound(raw.lookupByRid),
-    bulkInsert: bound(raw.bulkInsert),
     streamQuery: createStreamQuery(streamRaw),
-    insertStream: createInsertStream(insertStreamRaw),
   };
 }
 
@@ -98,6 +88,11 @@ async function safeRollback(raw: RawClient, database: string, transactionId: str
  * {@link TransactionHandle} whose calls all carry the transaction's id automatically, and ends
  * the transaction on both the success and failure paths.
  *
+ * - `beginTransaction`'s response is validated before it is trusted: a missing or blank
+ *   `transactionId` throws immediately, rather than handing `fn` a handle whose every call binds
+ *   an empty id - on this server a blank transaction id means "no external transaction, use the
+ *   auto-transaction path", so every statement would silently auto-commit and rollback would
+ *   become a no-op while this wrapper reported success.
  * - `fn` resolving normally commits.
  * - `fn` throwing or rejecting - synchronously or otherwise - rolls back and re-throws `fn`'s
  *   original error unchanged. If the rollback itself fails, that failure is attached as `cause`
@@ -105,12 +100,23 @@ async function safeRollback(raw: RawClient, database: string, transactionId: str
  *   caller-set causal chain is never overwritten), and swallowed if attaching it throws - some
  *   errors are frozen/non-extensible, and assigning `cause` on those throws under strict-mode
  *   ESM. `fn`'s error is re-thrown as itself either way.
+ * - A resolved `commitTransaction` call is not, by itself, proof of a commit: the server answers
+ *   a transaction id it no longer recognises (e.g. reaped after sitting idle past the server's
+ *   idle timeout) with `success=true, committed=false` and no error status at all. This wrapper
+ *   reads `committed` and throws (including the server's `message`) when it is false, rather than
+ *   reporting success for a transaction whose writes were silently lost.
  * - A failing commit issues a best-effort rollback (its own failure is swallowed - the server
  *   would otherwise hold the transaction open until it's reaped) and re-throws the commit error.
  */
 export function createTransaction(raw: RawClient) {
   return async function transaction<T>(database: string, fn: (tx: TransactionHandle) => Promise<T>): Promise<T> {
     const begun = await raw.beginTransaction({ database });
+    if (!begun.transactionId || begun.transactionId.trim() === "") {
+      throw new Error(
+        `transaction: beginTransaction did not return a transaction id for database "${database}" - ` +
+          "refusing to run the callback outside a real transaction.",
+      );
+    }
     const tx = createHandle(raw, database, begun.transactionId);
 
     let result: T;
@@ -133,7 +139,13 @@ export function createTransaction(raw: RawClient) {
     }
 
     try {
-      await raw.commitTransaction({ transaction: { transactionId: begun.transactionId, database } });
+      const committed = await raw.commitTransaction({ transaction: { transactionId: begun.transactionId, database } });
+      if (!committed.committed) {
+        throw new Error(
+          `transaction: commit for database "${database}" (transactionId=${begun.transactionId}) did not take ` +
+            `effect: ${committed.message || "no message from server"}`,
+        );
+      }
     } catch (commitErr) {
       await safeRollback(raw, database, begun.transactionId);
       throw commitErr;
