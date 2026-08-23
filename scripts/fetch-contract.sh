@@ -8,8 +8,8 @@
 #   --release <tag>   Downloads arcadedb-openapi-<tag>.json from the matching
 #                      GitHub release and verifies it against the published
 #                      .sha256 checksum.
-#   --image <docker-tag>
-#                      Starts the given arcadedata/arcadedb Docker image on an
+#   --image <image-reference>
+#                      Starts the given Docker image on an
 #                      ephemeral host port, waits for /api/v1/ready, and fetches
 #                      /api/v1/openapi.json using a root password the script
 #                      sets on the container itself.
@@ -38,7 +38,7 @@ GITHUB_REPO="ArcadeData/arcadedb"
 
 usage() {
   echo "Usage: $0 --release <tag>" >&2
-  echo "       $0 --image <docker-tag>" >&2
+  echo "       $0 --image <image-reference>   e.g. arcadedata/arcadedb:26.9.1-SNAPSHOT" >&2
   echo "       $0 --proto-from <path-to-arcadedb-checkout>" >&2
   exit 1
 }
