@@ -7,8 +7,7 @@ import { basicAuth, createClient as createHttpClient } from "../packages/client/
 import type { ArcadeDBServer } from "../packages/client/src/index.js";
 import { unwrap } from "../packages/client/src/internal/unwrap.js";
 import { bearerAuth, createClient as createGrpcClient, passwordAuth } from "../packages/client-grpc/src/index.js";
-import type { ArcadeDBGrpcClient, Interceptor } from "../packages/client-grpc/src/index.js";
-import type { GrpcRecordSchema, GrpcValueSchema, QueryResultSchema } from "../packages/client-grpc/src/gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
+import type { ArcadeDBGrpcClient, GrpcRecordSchema, GrpcValueSchema, InsertSummarySchema, Interceptor, QueryResultSchema } from "../packages/client-grpc/src/index.js";
 
 // Image pin: kept independent of `e2e/data-plane.test.ts`'s pin. That file's 26.8.1 pin is
 // justified by a REST-contract-specific fact (a documentation-only OpenAPI bump); nothing here
@@ -247,7 +246,7 @@ describe("end-to-end against a real ArcadeDB gRPC server", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("probes what the server does with a single empty final insertStream chunk (informational only)", async () => {
+  it("a single empty final insertStream chunk is accepted and returns an all-zero InsertSummary", async () => {
     // This test predates the fix: it bypassed `insertStream`'s wrapper (which used to throw on
     // an empty iterable) and talked to `raw.insertStream` directly to find out empirically
     // whether the server even accepts a zero-row final chunk, bounded by `timeoutMs` so an
@@ -256,6 +255,13 @@ describe("end-to-end against a real ArcadeDB gRPC server", () => {
     // `insertStream` itself does for an empty iterable (see `src/stream.ts`). Kept as-is, still
     // going through `raw` rather than the wrapper, as a standing record of the server's own
     // behavior independent of the wrapper's.
+    //
+    // T1: this used to assert `outcome.kind === "summary" || outcome.kind === "error"` against a
+    // try/catch that could only ever produce one of those two values - no server behaviour,
+    // including the 15s timeout the comment above claims to test, could turn this test red.
+    // `stream.ts`'s own empty-stream handling now depends on this exact server behaviour (see the
+    // comment in `envelopeChunks`), so this pins the real contract: the call resolves (does not
+    // throw) and comes back with every count at zero.
     async function* oneEmptyChunk() {
       // `options.database` is included alongside the chunk-level `database` the brief specifies,
       // for the same server-side reason `envelopeChunks` in `src/stream.ts` mirrors it: the
@@ -276,7 +282,7 @@ describe("end-to-end against a real ArcadeDB gRPC server", () => {
       };
     }
 
-    let outcome: { kind: "summary"; value: unknown } | { kind: "error"; value: unknown };
+    let outcome: { kind: "summary"; value: MessageShape<typeof InsertSummarySchema> } | { kind: "error"; value: unknown };
     try {
       const summary = await rootGrpc.raw.insertStream(oneEmptyChunk(), { timeoutMs: 15_000 });
       outcome = { kind: "summary", value: summary };
@@ -284,14 +290,15 @@ describe("end-to-end against a real ArcadeDB gRPC server", () => {
       outcome = { kind: "error", value: err };
     }
 
-    const describe = (value: unknown): unknown =>
-      JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? v.toString() : v));
-    console.log(`[insertStream empty-chunk probe] ${outcome.kind}: ${describe(outcome.value)}`);
+    expect(outcome.kind).toBe("summary");
+    if (outcome.kind !== "summary") throw new Error("unreachable - asserted above");
 
-    // The probe completing at all (rather than the 15s bound tripping) is the only thing this
-    // test asserts - the point is to observe and report the server's actual behavior, not to
-    // encode a contract for it yet.
-    expect(outcome.kind === "summary" || outcome.kind === "error").toBe(true);
+    expect(outcome.value.received).toBe(0n);
+    expect(outcome.value.inserted).toBe(0n);
+    expect(outcome.value.updated).toBe(0n);
+    expect(outcome.value.ignored).toBe(0n);
+    expect(outcome.value.failed).toBe(0n);
+    expect(outcome.value.errors).toEqual([]);
   });
 
   it("exists and listDatabases agree with what was created over HTTP", async () => {
