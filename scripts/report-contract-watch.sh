@@ -1,35 +1,52 @@
 #!/usr/bin/env bash
 #
 # Files what the daily contract watch found: one tracking issue, and - when a
-# refresh can fix it - one pull request that does.
+# refresh can fix it - one pull request that does. Closes the issue again when a
+# later run comes back clean.
 #
 # Everything here is IDEMPOTENT against a single label and a single branch. The
 # job runs every day; a script that created an issue per run would produce thirty
-# a month, and a feed nobody reads is indistinguishable from no feed at all. So a
-# second consecutive finding updates the existing issue instead of opening
-# another, and only comments when the situation actually moved.
+# a month, and a feed nobody reads is indistinguishable from no feed at all.
+#
+# Idempotency is compared on a FINGERPRINT of the finding, never on the rendered
+# body. The body carries the run URL, which is unique per run, so a body-to-body
+# comparison can never be equal and would post a "the finding changed" comment
+# every single day while claiming to be quiet - the exact opposite of the design,
+# and indistinguishable from it in the code until someone reads the run id.
 #
 # Consumes, from the environment: STATE, VERSION, IMAGE, VERIFY, RUN_URL,
 # TRACKING_LABEL, REFRESH_BRANCH, GH_TOKEN.
+#
+# Sourceable: the pure functions below can be tested without gh or a network.
 set -euo pipefail
 
-: "${STATE:?}" "${VERSION:?}" "${IMAGE:?}" "${VERIFY:?}" "${RUN_URL:?}"
 : "${TRACKING_LABEL:=contract-drift}" "${REFRESH_BRANCH:=chore/contract-refresh}"
-
 REPO="${GITHUB_REPOSITORY:-ArcadeData/arcadedb-clients}"
 
 verify_line() {
-  if [[ "$VERIFY" == "success" ]]; then
-    echo "The client builds and its full suite passes against \`$IMAGE\`."
+  if [[ "${VERIFY:-}" == "success" ]]; then
+    echo "The client builds and its full suite passes against \`${IMAGE:-}\`."
   else
-    echo "**The client's suite FAILS against \`$IMAGE\`.** See the run for which stage."
+    echo "**The client's suite FAILS against \`${IMAGE:-}\`.** See the run for which stage."
   fi
 }
 
-changed_files="$(git status --porcelain -- contracts typescript || true)"
+# Everything that makes this finding what it is, and nothing that merely makes
+# this RUN what it is. Two runs a day apart that found the same thing produce the
+# same fingerprint; a run that found something different does not.
+finding_fingerprint() {
+  printf '%s\n%s\n%s\n%s\n' \
+    "${STATE:-}" "${VERSION:-}" "${VERIFY:-}" "${CHANGED_FILES:-}" \
+    | shasum -a 256 | cut -c1-16
+}
+
+marker_of() {
+  # The fingerprint as stored in an existing issue body, or empty if absent.
+  sed -n 's/^<!-- contract-watch:[^:]*:\([0-9a-f]*\) -->$/\1/p' <<< "${1:-}" | head -1
+}
 
 build_body() {
-  echo "<!-- contract-watch:$STATE -->"
+  echo "<!-- contract-watch:${STATE}:$(finding_fingerprint) -->"
   echo
   case "$STATE" in
     contract-changed)
@@ -41,7 +58,7 @@ $(verify_line)
 Files affected by the refresh:
 
 \`\`\`
-${changed_files:-(none)}
+${CHANGED_FILES:-(none)}
 \`\`\`
 
 A pull request from \`$REFRESH_BRANCH\` carries the refreshed contracts, the
@@ -63,7 +80,6 @@ contract that did not, so nothing in this repository can fix it and there is no
 refresh PR to open - the contract is already current. Either the server changed
 behaviour without changing its contract, or the contract does not describe the
 behaviour it should.
-
 MD
       ;;
     *)
@@ -73,66 +89,82 @@ MD
   echo
   echo "Snapshot version: \`$VERSION\` · [workflow run]($RUN_URL)"
   echo
-  echo "_Maintained by \`.github/workflows/contract-watch.yml\`. This issue is updated in place;"
-  echo "it closes when a run finds the contract current and the suite green._"
+  echo "_Maintained by \`.github/workflows/contract-watch.yml\`. Updated in place, and closed"
+  echo "automatically by the first run that finds the contract current and the suite green._"
 }
 
-# The label is the identity of the tracking issue, so it has to exist before it
-# can be searched for.
-gh label create "$TRACKING_LABEL" \
-  --repo "$REPO" \
-  --color d93f0b \
-  --description "Contract drift or behaviour regression found by the daily contract watch" \
-  2>/dev/null || true
+open_tracking_issue() {
+  gh issue list --repo "$REPO" --label "$TRACKING_LABEL" --state open \
+    --limit 1 --json number --jq '.[0].number // empty'
+}
 
-title="Contract watch: $STATE against $VERSION"
-body="$(build_body)"
+# A clean run has to be able to RETRACT a previous finding. Without this, a
+# behaviour regression fixed upstream leaves its issue open forever, because no
+# pull request exists to close it - and the issue footer would be promising a
+# closure that nothing performs.
+close_if_resolved() {
+  local issue
+  issue="$(open_tracking_issue)"
+  [[ -z "$issue" ]] && return 0
+  gh issue close "$issue" --repo "$REPO" --comment \
+    "Resolved: [this run]($RUN_URL) found the contract current for \`$VERSION\` and the client's suite green."
+  echo "Closed issue #$issue" >&2
+}
 
-existing="$(gh issue list --repo "$REPO" --label "$TRACKING_LABEL" --state open \
-  --limit 1 --json number --jq '.[0].number // empty')"
+report_finding() {
+  gh label create "$TRACKING_LABEL" \
+    --repo "$REPO" \
+    --color d93f0b \
+    --description "Contract drift or behaviour regression found by the daily contract watch" \
+    2>/dev/null || true
 
-if [[ -z "$existing" ]]; then
-  issue_url="$(gh issue create --repo "$REPO" --title "$title" --label "$TRACKING_LABEL" --body "$body")"
-  issue="${issue_url##*/}"
-  echo "Opened issue #$issue" >&2
-else
-  issue="$existing"
-  previous="$(gh issue view "$issue" --repo "$REPO" --json body --jq .body)"
-  if [[ "$previous" == "$body" ]]; then
-    # Same finding as yesterday, unchanged in every detail. Updating the issue
-    # would be a no-op and commenting would be noise.
-    echo "Issue #$issue already describes this exact finding; leaving it alone." >&2
+  local title body existing previous issue
+  title="Contract watch: $STATE against $VERSION"
+  body="$(build_body)"
+  existing="$(open_tracking_issue)"
+
+  if [[ -z "$existing" ]]; then
+    local url
+    url="$(gh issue create --repo "$REPO" --title "$title" --label "$TRACKING_LABEL" --body "$body")"
+    issue="${url##*/}"
+    echo "Opened issue #$issue" >&2
   else
+    issue="$existing"
+    previous="$(gh issue view "$issue" --repo "$REPO" --json body --jq .body)"
+    # Always refresh the body, so the run link points at the latest evidence.
     gh issue edit "$issue" --repo "$REPO" --title "$title" --body "$body"
-    gh issue comment "$issue" --repo "$REPO" --body \
-      "The finding changed as of [this run]($RUN_URL). The description above has been updated."
-    echo "Updated issue #$issue" >&2
+    if [[ "$(marker_of "$previous")" == "$(finding_fingerprint)" ]]; then
+      echo "Issue #$issue already describes this exact finding; not commenting." >&2
+    else
+      gh issue comment "$issue" --repo "$REPO" --body \
+        "The finding changed as of [this run]($RUN_URL). The description above has been updated."
+      echo "Updated issue #$issue" >&2
+    fi
   fi
-fi
+  printf '%s' "$issue"
+}
 
-if [[ "$STATE" != "contract-changed" ]]; then
-  exit 0
-fi
+open_refresh_pr() {
+  local issue="$1"
+  git config user.name "github-actions[bot]"
+  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-# The refresh PR. A fixed branch, force-pushed, so consecutive days update one
-# pull request rather than stacking near-identical ones.
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-git checkout -b "$REFRESH_BRANCH"
-git add contracts typescript
-git commit -m "chore: refresh the contract to $VERSION
+  # -B, not -b: the branch may already exist locally, and a refresh that fails
+  # only on its second run is worse than one that never worked.
+  git checkout -B "$REFRESH_BRANCH"
+  git add contracts typescript
+  git commit -m "chore: refresh the contract to $VERSION
 
 Opened by the daily contract watch. Regenerated from $IMAGE, with the previous
 version retired by scripts/adopt-contract-version.sh.
 
 Refs #$issue"
-git push --force origin "$REFRESH_BRANCH"
+  git push --force origin "$REFRESH_BRANCH"
 
-open_pr="$(gh pr list --repo "$REPO" --head "$REFRESH_BRANCH" --state open \
-  --limit 1 --json number --jq '.[0].number // empty')"
-
-pr_body="$(cat <<MD
+  local open_pr pr_body
+  open_pr="$(gh pr list --repo "$REPO" --head "$REFRESH_BRANCH" --state open \
+    --limit 1 --json number --jq '.[0].number // empty')"
+  pr_body="$(cat <<MD
 Refreshes the committed contract to \`$VERSION\`, regenerates both clients, and
 retires the previous version's artifacts and references.
 
@@ -145,11 +177,33 @@ in place each day the contract moves._
 MD
 )"
 
-if [[ -z "$open_pr" ]]; then
-  gh pr create --repo "$REPO" --base main --head "$REFRESH_BRANCH" \
-    --title "chore: refresh the contract to $VERSION" --body "$pr_body"
-else
-  gh pr edit "$open_pr" --repo "$REPO" \
-    --title "chore: refresh the contract to $VERSION" --body "$pr_body"
-  echo "Updated PR #$open_pr" >&2
+  if [[ -z "$open_pr" ]]; then
+    gh pr create --repo "$REPO" --base main --head "$REFRESH_BRANCH" \
+      --title "chore: refresh the contract to $VERSION" --body "$pr_body"
+  else
+    gh pr edit "$open_pr" --repo "$REPO" \
+      --title "chore: refresh the contract to $VERSION" --body "$pr_body"
+    echo "Updated PR #$open_pr" >&2
+  fi
+}
+
+main() {
+  : "${STATE:?}" "${VERSION:?}" "${IMAGE:?}" "${VERIFY:?}" "${RUN_URL:?}"
+  CHANGED_FILES="$(git status --porcelain -- contracts typescript || true)"
+  export CHANGED_FILES
+
+  if [[ "$STATE" == "quiet" ]]; then
+    close_if_resolved
+    return 0
+  fi
+
+  local issue
+  issue="$(report_finding)"
+  [[ "$STATE" == "contract-changed" ]] && open_refresh_pr "$issue"
+  return 0
+}
+
+# Only run when executed, so the pure functions above can be sourced and tested.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi

@@ -13,7 +13,7 @@
 #                      ephemeral host port, waits for /api/v1/ready, and fetches
 #                      /api/v1/openapi.json using a root password the script
 #                      sets on the container itself.
-#   --proto-from <path-to-arcadedb-checkout>
+#   --proto-from <path-to-arcadedb-checkout> [<version>]
 #                      Copies grpc/src/main/proto/arcadedb-server.proto out of a
 #                      local arcadedb checkout. A running server does not serve
 #                      its own .proto, so --image cannot supply this the way it
@@ -21,7 +21,10 @@
 #                      source. The copy is named with the version the OpenAPI
 #                      contract already carries (read from the existing
 #                      contracts/arcadedb-openapi-*.json), so the REST and gRPC
-#                      contracts stay legible as one pair.
+#                      contracts stay legible as one pair. Pass <version>
+#                      explicitly when a bump is in flight and two OpenAPI specs
+#                      are momentarily present, which makes that derivation
+#                      impossible.
 #
 # In the --release and --image modes, the resulting spec is refused unless it
 # is structurally provably post-M0: the /api/v1/begin/{database} 204 response
@@ -39,14 +42,15 @@ GITHUB_REPO="ArcadeData/arcadedb"
 usage() {
   echo "Usage: $0 --release <tag>" >&2
   echo "       $0 --image <image-reference>   e.g. arcadedata/arcadedb:26.9.1-SNAPSHOT" >&2
-  echo "       $0 --proto-from <path-to-arcadedb-checkout>" >&2
+  echo "       $0 --proto-from <path-to-arcadedb-checkout> [<version>]" >&2
   exit 1
 }
 
 MODE=""
 TARGET=""
+EXPLICIT_VERSION=""
 
-if [[ $# -ne 2 ]]; then
+if [[ $# -lt 2 || $# -gt 3 ]]; then
   usage
 fi
 
@@ -65,6 +69,12 @@ case "$1" in
     ;;
 esac
 TARGET="$2"
+EXPLICIT_VERSION="${3:-}"
+
+if [[ -n "$EXPLICIT_VERSION" && "$MODE" != "proto-from" ]]; then
+  echo "ERROR: a version argument is only meaningful with --proto-from." >&2
+  usage
+fi
 
 mkdir -p "$CONTRACTS_DIR"
 
@@ -155,6 +165,19 @@ elif [[ "$MODE" == "proto-from" ]]; then
     echo "ERROR: no proto at $SOURCE_PROTO" >&2
     echo "Pass the path to an arcadedb checkout containing grpc/src/main/proto/arcadedb-server.proto." >&2
     exit 1
+  fi
+
+  # An explicit version short-circuits the derivation below. That is not a
+  # convenience: DURING A VERSION BUMP the derivation cannot work. --image has
+  # just written the new spec beside the old one, so there are two, and deriving
+  # a version by insisting on exactly one would abort here - in the one scenario
+  # this whole pipeline exists to handle. The caller that knows the target
+  # version (contract-watch.yml reads it from arcadedb's pom) passes it.
+  if [[ -n "$EXPLICIT_VERSION" ]]; then
+    PROTO_OUT="$CONTRACTS_DIR/arcadedb-server-${EXPLICIT_VERSION}.proto"
+    cp "$SOURCE_PROTO" "$PROTO_OUT"
+    echo "Wrote $PROTO_OUT" >&2
+    exit 0
   fi
 
   # Reuse the version the OpenAPI contract already carries, so the REST and

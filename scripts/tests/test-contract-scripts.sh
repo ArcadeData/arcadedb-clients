@@ -10,6 +10,12 @@
 # Each check is bounds-checked before it is asserted. An unguarded index or a
 # missing file under `set -e` aborts the harness, which prints no FAIL line and
 # silently skips every later check - a green-looking run that tested nothing.
+# The report-contract-watch.sh section below SOURCES that script and drives its
+# functions through the environment. shellcheck cannot follow a `source` into a
+# runtime-resolved path, so every variable those functions read looks unused
+# here. They are not: removing one turns the fingerprint assertions red. The
+# directive has to sit before the first COMMAND to apply file-wide.
+# shellcheck disable=SC2034
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +38,10 @@ make_fixture() {
            "$root/typescript/packages/client-grpc/src/gen" \
            "$root/typescript/packages/client-grpc/test" \
            "$root/typescript/packages/client"
-  cp "$SCRIPTS_DIR/resolve-openapi-contract.sh" "$SCRIPTS_DIR/adopt-contract-version.sh" "$root/scripts/"
+  cp "$SCRIPTS_DIR/resolve-openapi-contract.sh" "$SCRIPTS_DIR/adopt-contract-version.sh" \
+     "$SCRIPTS_DIR/fetch-contract.sh" "$root/scripts/"
+  mkdir -p "$root/fake-arcadedb/grpc/src/main/proto"
+  echo 'syntax = "proto3";' > "$root/fake-arcadedb/grpc/src/main/proto/arcadedb-server.proto"
   echo '{}' > "$root/contracts/arcadedb-openapi-${version}.json"
   echo 'syntax = "proto3";' > "$root/contracts/arcadedb-server-${version}.proto"
   echo '// generated' > "$root/typescript/packages/client-grpc/src/gen/arcadedb-server-${version}_pb.ts"
@@ -81,6 +90,35 @@ rm -f "$FIX/contracts/arcadedb-openapi-26.9.2-SNAPSHOT.json"
 rm -f "$FIX/contracts/arcadedb-openapi-26.9.1-SNAPSHOT.json"
 "$FIX/scripts/resolve-openapi-contract.sh" "$FIX/contracts" >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses when no contract is present"
+rm -rf "$FIX"
+
+echo "fetch-contract.sh --proto-from"
+
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+# Mid-bump, --image has already written the new spec beside the old one. Deriving
+# the version from "the single OpenAPI spec" is impossible at that moment, and
+# without an explicit version the refresh DEADLOCKS in exactly the scenario the
+# daily watch exists to handle: two specs present, --proto-from aborts, and
+# adopt-contract-version.sh is never reached to resolve it.
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+"$FIX/scripts/fetch-contract.sh" --proto-from "$FIX/fake-arcadedb" >/dev/null 2>&1; rc=$?
+check "$rc" "1" "still refuses to GUESS a version while two specs are present"
+
+"$FIX/scripts/fetch-contract.sh" --proto-from "$FIX/fake-arcadedb" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "0" "accepts an explicit version while two specs are present"
+if [[ -f "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto" ]]; then
+  ok "writes the proto under the explicitly requested version"
+else
+  bad "writes the proto under the explicitly requested version"
+fi
+
+# The whole refresh sequence the workflow runs, in order, across a bump.
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "0" "the full refresh sequence completes across a version bump"
+check "$(find "$FIX/contracts" -maxdepth 1 -name '*.json' | wc -l | tr -d '[:space:]')" "1" "and leaves exactly one OpenAPI contract"
+
+"$FIX/scripts/fetch-contract.sh" --image some:tag 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "1" "rejects a version argument in a mode that has no use for one"
 rm -rf "$FIX"
 
 echo "adopt-contract-version.sh"
@@ -164,6 +202,51 @@ check "$after" "$before" "re-adopting the current version changes nothing"
 "$FIX/scripts/adopt-contract-version.sh" 99.9.9-NOPE >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses a version whose contracts were never fetched"
 rm -rf "$FIX"
+
+echo "report-contract-watch.sh (pure functions, no gh)"
+
+# Sourced, not executed: main() is guarded so these can be exercised offline.
+# shellcheck source=/dev/null
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT IMAGE=img VERIFY=success RUN_URL=x \
+  source "$SCRIPTS_DIR/report-contract-watch.sh"
+
+# THE defect this replaced: the body embeds the run URL, which is unique per run,
+# so comparing rendered bodies is never equal and posts a "the finding changed"
+# comment every single day while the code claims to be quiet. The fingerprint
+# must ignore the run and track only the finding.
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT VERIFY=success CHANGED_FILES=" M a"
+RUN_URL="https://example.invalid/runs/1"; a="$(finding_fingerprint)"
+RUN_URL="https://example.invalid/runs/2"; b="$(finding_fingerprint)"
+check "$a" "$b" "fingerprint ignores the run URL, so an unchanged finding stays unchanged"
+
+CHANGED_FILES=" M a
+ M b"; c="$(finding_fingerprint)"
+if [[ "$c" != "$a" ]]; then ok "fingerprint moves when the affected files move"; else bad "fingerprint moves when the affected files move"; fi
+
+CHANGED_FILES=" M a"; VERIFY=failure; d="$(finding_fingerprint)"
+if [[ "$d" != "$a" ]]; then ok "fingerprint moves when the suite result flips"; else bad "fingerprint moves when the suite result flips"; fi
+VERIFY=success
+
+# The round trip that decides whether a comment is posted.
+IMAGE="arcadedata/arcadedb:26.10.1-SNAPSHOT"
+REFRESH_BRANCH="chore/contract-refresh"
+RUN_URL="https://example.invalid/runs/3"
+body="$(build_body 2>/dev/null)"
+
+# Assert the body is WHOLE, not merely that its first line is right. The marker
+# is emitted before everything else, so a build_body that dies partway still
+# satisfies a marker-only assertion - which is how these checks passed while
+# stderr was reporting an unbound variable.
+case "$body" in
+  *"$RUN_URL"*) ok "build_body renders through to the end" ;;
+  *) bad "build_body renders through to the end (truncated: ${#body} chars)" ;;
+esac
+check "$(marker_of "$body")" "$(finding_fingerprint)" "the marker written into the body is the one read back out"
+
+RUN_URL="https://example.invalid/runs/4"
+check "$(marker_of "$(build_body 2>/dev/null)")" "$(marker_of "$body")" "a later run with the same finding reads back the same marker"
+
+check "$(marker_of "no marker here at all")" "" "an unmarked body yields no marker rather than a false match"
 
 echo
 echo "passed: $PASS   failed: $FAIL"

@@ -103,7 +103,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          # 24, not the build job's 20: this job runs `npm run e2e`, and
+          # testcontainers@12 requires Node >= 22.22. ci.yml splits its e2e into a
+          # separate job for exactly this reason; here one job does both, so it
+          # takes the higher floor.
+          node-version: 24
           cache: npm
           cache-dependency-path: typescript/package-lock.json
 
@@ -177,14 +181,21 @@ jobs:
             echo "state=contract-changed" >> "$GITHUB_OUTPUT"
           fi
 
+      # Runs on EVERY state, including quiet. A quiet run is what closes a
+      # tracking issue: for a behaviour regression there is no pull request to
+      # close it, so without this the issue outlives its cause and the footer
+      # promises a closure nothing performs.
       - name: Report
-        if: ${{ steps.outcome.outputs.state != 'quiet' && !inputs.dry_run }}
+        if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATE: ${{ steps.outcome.outputs.state }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           VERSION: ${{ steps.version.outputs.version }}
           IMAGE: ${{ steps.version.outputs.image }}
           VERIFY: ${{ steps.verify.outcome }}
+          TRACKING_LABEL: ${{ env.TRACKING_LABEL }}
+          REFRESH_BRANCH: ${{ env.REFRESH_BRANCH }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: ./scripts/report-contract-watch.sh
 
