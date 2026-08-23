@@ -180,4 +180,27 @@ describe("insertStream", () => {
 
     expect(result).toBe(summary);
   });
+
+  it("sends one empty final chunk and returns the server's summary when chunks is empty", async () => {
+    // An empty stream is a legitimate outcome (a filter that matched nothing produces one), not
+    // an error - empirically verified against a real server (task 6 of the M1B plan): a single
+    // chunk with zero rows and `last: true` is accepted cleanly and returns an all-zero
+    // `InsertSummary` in under 100ms. This asserts the wrapper sends exactly that chunk rather
+    // than throwing, and hands back the server's own summary unchanged.
+    const summary = insertSummary();
+    const { raw, sent } = mockRaw(summary);
+    const insertStream = createInsertStream(raw);
+
+    async function* noBatches(): AsyncGenerator<InsertChunk["rows"]> {
+      // Yields nothing.
+    }
+
+    const result = await insertStream({ database: "mydb", chunks: noBatches() });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.rows).toEqual([]);
+    expect(sent[0]?.last).toBe(true);
+    expect(sent[0]?.database).toBe("mydb");
+    expect(result).toBe(summary);
+  });
 });

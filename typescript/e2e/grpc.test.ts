@@ -248,13 +248,14 @@ describe("end-to-end against a real ArcadeDB gRPC server", () => {
   });
 
   it("probes what the server does with a single empty final insertStream chunk (informational only)", async () => {
-    // `insertStream`'s ergonomic wrapper currently throws when given an empty iterable, rather
-    // than sending a single zero-row final chunk - a provisional choice made without knowing
-    // whether the server even accepts a zero-row final chunk. This test bypasses the wrapper and
-    // talks to `raw.insertStream` directly to find out empirically, bounded by `timeoutMs` so an
-    // unexpected server hang fails this one test instead of wedging the whole suite. It does NOT
-    // change `insertStream`'s behavior - see this task's report for the finding and what should
-    // happen next.
+    // This test predates the fix: it bypassed `insertStream`'s wrapper (which used to throw on
+    // an empty iterable) and talked to `raw.insertStream` directly to find out empirically
+    // whether the server even accepts a zero-row final chunk, bounded by `timeoutMs` so an
+    // unexpected server hang fails this one test instead of wedging the whole suite. It found
+    // that the server accepts it cleanly - see this task's report - and that finding is now what
+    // `insertStream` itself does for an empty iterable (see `src/stream.ts`). Kept as-is, still
+    // going through `raw` rather than the wrapper, as a standing record of the server's own
+    // behavior independent of the wrapper's.
     async function* oneEmptyChunk() {
       // `options.database` is included alongside the chunk-level `database` the brief specifies,
       // for the same server-side reason `envelopeChunks` in `src/stream.ts` mirrors it: the

@@ -71,6 +71,9 @@ export interface InsertStreamRequest {
  * - `database` set on the first chunk only (omitted afterwards - the server caches it)
  * - `last: true` on the final chunk only
  *
+ * An empty `request.chunks` sends a single chunk with zero rows and `last: true`, rather than
+ * throwing - see the comment in {@link envelopeChunks} for why.
+ *
  * Awaits and returns the server's single `InsertSummary` response.
  */
 export function createInsertStream(raw: Pick<RawClient, "insertStream">) {
@@ -84,7 +87,24 @@ async function* envelopeChunks(request: InsertStreamRequest, sessionId: string):
 
   let current = await iterator.next();
   if (current.done === true) {
-    throw new Error("insertStream: chunks must yield at least one batch of rows");
+    // An empty stream is a legitimate outcome, not an error - a filter that matched nothing
+    // produces one. `@arcadedb/client`'s README establishes the same principle for `truncated`:
+    // do not turn a legitimate outcome into an exception, and do not invent a result the server
+    // did not give you. Empirically verified against a real server (task 6 of the M1B plan): a
+    // single chunk with zero rows and `last: true` is accepted cleanly, in under 100ms, and
+    // returns an all-zero `InsertSummary` - so this sends exactly that chunk and hands back
+    // whatever summary the server gives back, rather than throwing.
+    yield {
+      database: request.database,
+      credentials: request.credentials,
+      options: { ...request.options, database: request.database },
+      transaction: request.transaction,
+      sessionId,
+      chunkSeq: 1n,
+      rows: [],
+      last: true,
+    };
+    return;
   }
 
   let chunkSeq = 1n;
