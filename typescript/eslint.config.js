@@ -4,7 +4,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'],
+    // Generated output is excluded globally rather than per-block. Both packages carry a
+    // generated directory (`client/src/generated` from openapi-typescript, `client-grpc/src/gen`
+    // from protoc-gen-es); neither is ever hand-edited, so a finding in one is not actionable -
+    // the only fix is to regenerate, and the drift gate already guarantees they match the
+    // contract. protoc-gen-es also emits its own `/* eslint-disable */` header, which this
+    // config's unused-directive reporting flagged as a warning: a permanent, unfixable warning
+    // in lint output is how real findings start getting scrolled past.
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/src/gen/**', '**/src/generated/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -26,6 +33,23 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         project: './packages/client/tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    // Same rationale as the block above, for `@arcadedb/client-grpc`: `transaction.ts` and
+    // `stream.ts` are almost entirely promise plumbing (begin/commit/rollback sequencing, manual
+    // async-iterator draining) - exactly the shape where a forgotten `await` is both easy to write
+    // and easy to miss in review. This package shipped with no type-aware lint coverage at all:
+    // `files: ['packages/client/src/**/*.ts']` above never matched anything under
+    // `packages/client-grpc`. `src/gen/**` needs no exclusion here - the global `ignores` at the
+    // top of this file already covers every generated directory in the workspace.
+    files: ['packages/client-grpc/src/**/*.ts'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        project: './packages/client-grpc/tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },

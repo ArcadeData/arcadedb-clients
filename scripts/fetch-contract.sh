@@ -4,7 +4,7 @@
 # contracts/. Every generated client, in every language this repository will
 # ever host, derives from the file this script writes.
 #
-# Two modes:
+# Three modes:
 #   --release <tag>   Downloads arcadedb-openapi-<tag>.json from the matching
 #                      GitHub release and verifies it against the published
 #                      .sha256 checksum.
@@ -13,11 +13,22 @@
 #                      ephemeral host port, waits for /api/v1/ready, and fetches
 #                      /api/v1/openapi.json using a root password the script
 #                      sets on the container itself.
+#   --proto-from <path-to-arcadedb-checkout>
+#                      Copies grpc/src/main/proto/arcadedb-server.proto out of a
+#                      local arcadedb checkout. A running server does not serve
+#                      its own .proto, so --image cannot supply this the way it
+#                      supplies the OpenAPI spec; the checkout is the only
+#                      source. The copy is named with the version the OpenAPI
+#                      contract already carries (read from the existing
+#                      contracts/arcadedb-openapi-*.json), so the REST and gRPC
+#                      contracts stay legible as one pair.
 #
-# In both modes, the resulting spec is refused unless it is structurally
-# provably post-M0: the /api/v1/begin/{database} 204 response must carry the
-# arcadedb-session-id header. A version string proves nothing about content;
-# this marker cannot be true of any pre-M0 spec.
+# In the --release and --image modes, the resulting spec is refused unless it
+# is structurally provably post-M0: the /api/v1/begin/{database} 204 response
+# must carry the arcadedb-session-id header. A version string proves nothing
+# about content; this marker cannot be true of any pre-M0 spec. --proto-from
+# copies source text rather than transforming JSON, so no such gate applies -
+# the version match against the existing OpenAPI contract is the check.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +39,7 @@ GITHUB_REPO="ArcadeData/arcadedb"
 usage() {
   echo "Usage: $0 --release <tag>" >&2
   echo "       $0 --image <docker-tag>" >&2
+  echo "       $0 --proto-from <path-to-arcadedb-checkout>" >&2
   exit 1
 }
 
@@ -44,6 +56,9 @@ case "$1" in
     ;;
   --image)
     MODE="image"
+    ;;
+  --proto-from)
+    MODE="proto-from"
     ;;
   *)
     usage
@@ -131,6 +146,40 @@ elif [[ "$MODE" == "image" ]]; then
   # The spec endpoint requires authentication (GetOpenApiHandler.isRequireAuthentication()
   # returns true), so use the root password this script just set on the container.
   curl --fail -s -u "root:${ROOT_PASSWORD}" "${BASE_URL}/api/v1/openapi.json" -o "$RAW_SPEC"
+
+elif [[ "$MODE" == "proto-from" ]]; then
+  ARCADEDB_CHECKOUT="$TARGET"
+  SOURCE_PROTO="$ARCADEDB_CHECKOUT/grpc/src/main/proto/arcadedb-server.proto"
+
+  if [[ ! -f "$SOURCE_PROTO" ]]; then
+    echo "ERROR: no proto at $SOURCE_PROTO" >&2
+    echo "Pass the path to an arcadedb checkout containing grpc/src/main/proto/arcadedb-server.proto." >&2
+    exit 1
+  fi
+
+  # Reuse the version the OpenAPI contract already carries, so the REST and
+  # gRPC contracts stay legible as one pair rather than drifting apart.
+  shopt -s nullglob
+  EXISTING_OPENAPI_SPECS=("$CONTRACTS_DIR"/arcadedb-openapi-*.json)
+  shopt -u nullglob
+  if [[ "${#EXISTING_OPENAPI_SPECS[@]}" -eq 0 ]]; then
+    echo "ERROR: no contracts/arcadedb-openapi-*.json found to read the version from." >&2
+    echo "Run this script's --release or --image mode first." >&2
+    exit 1
+  fi
+  if [[ "${#EXISTING_OPENAPI_SPECS[@]}" -ne 1 ]]; then
+    echo "ERROR: expected exactly one contracts/arcadedb-openapi-*.json, found ${#EXISTING_OPENAPI_SPECS[@]}:" >&2
+    printf '  %s\n' "${EXISTING_OPENAPI_SPECS[@]}" >&2
+    exit 1
+  fi
+  OPENAPI_BASENAME="$(basename "${EXISTING_OPENAPI_SPECS[0]}")"
+  VERSION_TAG="${OPENAPI_BASENAME#arcadedb-openapi-}"
+  VERSION_TAG="${VERSION_TAG%.json}"
+
+  PROTO_OUT="$CONTRACTS_DIR/arcadedb-server-${VERSION_TAG}.proto"
+  cp "$SOURCE_PROTO" "$PROTO_OUT"
+  echo "Wrote $PROTO_OUT" >&2
+  exit 0
 fi
 
 OUT="$CONTRACTS_DIR/arcadedb-openapi-${VERSION_TAG}.json"
