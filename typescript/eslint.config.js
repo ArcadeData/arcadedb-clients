@@ -30,4 +30,22 @@ export default tseslint.config(
       },
     },
   },
+  {
+    // Same rationale as the block above, for `@arcadedb/client-grpc`: `transaction.ts` and
+    // `stream.ts` are almost entirely promise plumbing (begin/commit/rollback sequencing, manual
+    // async-iterator draining) - exactly the shape where a forgotten `await` is both easy to write
+    // and easy to miss in review. This package shipped with no type-aware lint coverage at all
+    // (I7): `files: ['packages/client/src/**/*.ts']` above never matched anything under
+    // `packages/client-grpc`. `src/gen/**` is excluded - it is generated, never hand-edited, and
+    // large enough that linting it would only slow CI down for no actionable findings.
+    files: ['packages/client-grpc/src/**/*.ts'],
+    ignores: ['packages/client-grpc/src/gen/**'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        project: './packages/client-grpc/tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
 );

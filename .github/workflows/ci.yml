@@ -39,7 +39,31 @@ jobs:
         working-directory: typescript
         run: |
           npm run generate
+
+          # Catches a MODIFIED generated file (existing path, changed content).
           git diff --exit-code -- packages/client/src/generated packages/client-grpc/src/gen
+
+          # Catches a RENAMED generated file: `git diff` above is blind to untracked paths, and
+          # the gRPC generated filename embeds the contract version
+          # (arcadedb-server-<version>_pb.ts), so a contract refresh emits a NEW file beside the
+          # old one rather than modifying it in place - the diff check alone would stay green
+          # while src/index.ts kept importing the stale, now-orphaned file.
+          if [[ -n "$(git status --porcelain -- packages/client/src/generated packages/client-grpc/src/gen)" ]]; then
+            echo "Generated output changed (untracked and/or modified files below) - commit the regenerated output:" >&2
+            git status --porcelain -- packages/client/src/generated packages/client-grpc/src/gen >&2
+            exit 1
+          fi
+
+          # "Expected exactly one" check for the gRPC .proto contract, mirroring the one
+          # scripts/fetch-contract.sh already has for the OpenAPI spec (fetch-contract.sh:170-174):
+          # a second contracts/*.proto left behind by a version bump would silently make
+          # `buf generate`'s glob pick up an unintended file, or leave stale output nobody notices.
+          PROTO_COUNT=$(find ../contracts -maxdepth 1 -name '*.proto' | wc -l | tr -d '[:space:]')
+          if [[ "$PROTO_COUNT" -ne 1 ]]; then
+            echo "ERROR: expected exactly one contracts/*.proto, found $PROTO_COUNT:" >&2
+            find ../contracts -maxdepth 1 -name '*.proto' >&2
+            exit 1
+          fi
 
       - name: Lint
         working-directory: typescript
