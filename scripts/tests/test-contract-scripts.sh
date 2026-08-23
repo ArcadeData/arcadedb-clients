@@ -89,12 +89,12 @@ FIX="$(make_fixture 26.9.1-SNAPSHOT)"
 # A bump: both new contracts land beside the old ones, as fetch-contract.sh leaves them.
 echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
 echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
-adopt_out="$("$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT 2>&1)"; rc=$?
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
 check "$rc" "0" "adopts a new version"
 
-check "$(ls "$FIX/contracts"/arcadedb-openapi-*.json 2>/dev/null | wc -l | tr -d '[:space:]')" "1" "retires the superseded OpenAPI contract"
-check "$(ls "$FIX/contracts"/arcadedb-server-*.proto 2>/dev/null | wc -l | tr -d '[:space:]')" "1" "retires the superseded proto"
-check "$(ls "$FIX/typescript/packages/client-grpc/src/gen"/*_pb.ts 2>/dev/null | wc -l | tr -d '[:space:]')" "0" "retires the orphaned generated module"
+check "$(find "$FIX/contracts" -maxdepth 1 -name 'arcadedb-openapi-*.json' | wc -l | tr -d '[:space:]')" "1" "retires the superseded OpenAPI contract"
+check "$(find "$FIX/contracts" -maxdepth 1 -name 'arcadedb-server-*.proto' | wc -l | tr -d '[:space:]')" "1" "retires the superseded proto"
+check "$(find "$FIX/typescript/packages/client-grpc/src/gen" -maxdepth 1 -name '*_pb.ts' | wc -l | tr -d '[:space:]')" "0" "retires the orphaned generated module"
 
 src="$FIX/typescript/packages/client-grpc/src/index.ts"
 if [[ -f "$src" ]] && ! grep -q "26.9.1-SNAPSHOT" "$src" && grep -q "arcadedb-server-26.10.1-SNAPSHOT_pb.js" "$src"; then
@@ -117,6 +117,7 @@ for pkg in client client-grpc; do
 done
 
 readme="$FIX/typescript/packages/client-grpc/README.md"
+# shellcheck disable=SC2016  # the backticks are literal markdown, not a subshell
 if [[ -f "$readme" ]] && grep -q 'generated from `contracts/arcadedb-server-26.10.1-SNAPSHOT.proto`' "$readme"; then
   ok "updates the README's 'generated from' line"
 else

@@ -1,0 +1,195 @@
+name: Contract watch
+
+# Refreshes the contracts from the SNAPSHOT server built off arcadedb's main and
+# reports what changed, so a contract problem is found on the day it lands rather
+# than at release time.
+#
+# Both halves of a "problem" are reported, and they are not the same thing:
+#
+#   - the CONTRACT changed  -> an issue describing it, plus a PR that adopts the
+#     new contract, regenerates, and carries the test result. Reviewable diff.
+#   - the contract did NOT change but the suite went red -> a server behaviour
+#     regression against an unchanged contract. An issue only; no PR in this
+#     repository can fix it.
+#
+# Both are filed idempotently against a single tracking issue and a single
+# branch. A daily job that opened a new issue per run would produce thirty a
+# month and be muted within a week, which is the same as not having it.
+
+on:
+  schedule:
+    # 05:15 UTC daily. After arcadedb's push-to-main deploy has published the
+    # day's SNAPSHOT image, before the working day starts in CET.
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report only: do not file an issue or open a PR"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-watch
+  cancel-in-progress: false
+
+env:
+  TRACKING_LABEL: contract-drift
+  REFRESH_BRANCH: chore/contract-refresh
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout clients
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The proto and the version come from ONE checkout of arcadedb's main, so
+      # contract, proto and image all describe the same commit by construction.
+      # Deriving the version is the point: a hardcoded 26.9.1-SNAPSHOT would keep
+      # testing a frozen image forever the day main bumps, staying green while
+      # meaning nothing.
+      - name: Checkout arcadedb main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ArcadeData/arcadedb
+          ref: main
+          path: .arcadedb
+          sparse-checkout: |
+            pom.xml
+            grpc/src/main/proto
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve the snapshot version
+        id: version
+        run: |
+          set -euo pipefail
+          # The parent pom's OWN <version>, read as XML. Grepping the first
+          # <version> in the file would find whatever the pom happens to list
+          # first, and python3 is guaranteed on the runner where xmllint is not.
+          VERSION=$(python3 -c 'import xml.etree.ElementTree as ET; r = ET.parse(".arcadedb/pom.xml").getroot(); ns = r.tag.split("}")[0].strip("{") if "}" in r.tag else ""; n = r.find("{%s}version" % ns) if ns else r.find("version"); print(n.text.strip() if n is not None and n.text else "")')
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::could not read the project version from arcadedb's pom.xml" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=arcadedata/arcadedb:$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Snapshot under watch: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      # A missing image is a real failure, not a reason to skip quietly: it means
+      # the day's deploy did not publish, and a silent skip would look identical
+      # to a clean run. Pulling rather than inspecting the manifest, because the
+      # image is needed by both the contract fetch and the e2e suite anyway - so
+      # this doubles as a warm cache and gives one clear failure instead of two
+      # obscure ones later.
+      - name: Pull the snapshot image
+        run: |
+          set -euo pipefail
+          if ! docker pull --quiet "${{ steps.version.outputs.image }}"; then
+            echo "::error::${{ steps.version.outputs.image }} could not be pulled - did the deploy to main fail?" >&2
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Contract script tests
+        run: ./scripts/tests/test-contract-scripts.sh
+
+      - name: Refresh both contracts
+        run: |
+          set -euo pipefail
+          ./scripts/fetch-contract.sh --image "${{ steps.version.outputs.image }}"
+          ./scripts/fetch-contract.sh --proto-from .arcadedb
+          ./scripts/adopt-contract-version.sh "${{ steps.version.outputs.version }}"
+
+      - name: Regenerate
+        working-directory: typescript
+        run: npm run generate
+
+      - name: Detect contract change
+        id: detect
+        run: |
+          set -euo pipefail
+          # --porcelain, not `git diff`: a version bump renames the contract and
+          # the generated module, so the new files are UNTRACKED and a diff-only
+          # check would report nothing while everything had moved.
+          CHANGES="$(git status --porcelain -- contracts typescript)"
+          if [[ -n "$CHANGES" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Contract changed"
+              echo
+              echo '```'
+              echo "$CHANGES"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "### Contract unchanged" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Verify the client against the snapshot
+        id: verify
+        continue-on-error: true
+        working-directory: typescript
+        env:
+          ARCADEDB_DOCKER_IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run e2e
+
+      - name: Summarise the outcome
+        id: outcome
+        run: |
+          set -euo pipefail
+          CHANGED="${{ steps.detect.outputs.changed }}"
+          VERIFY="${{ steps.verify.outcome }}"
+          if [[ "$CHANGED" == "false" && "$VERIFY" == "success" ]]; then
+            echo "state=quiet" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGED" == "false" ]]; then
+            # The contract is byte-identical yet the client no longer works: the
+            # server's BEHAVIOUR moved under a contract that did not. Nothing in
+            # this repository can fix that, so there is no PR to open.
+            echo "state=behaviour-regression" >> "$GITHUB_OUTPUT"
+          else
+            echo "state=contract-changed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report
+        if: ${{ steps.outcome.outputs.state != 'quiet' && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATE: ${{ steps.outcome.outputs.state }}
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ${{ steps.version.outputs.image }}
+          VERIFY: ${{ steps.verify.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./scripts/report-contract-watch.sh
+
+      - name: Fail the run when something needs attention
+        if: ${{ steps.outcome.outputs.state != 'quiet' }}
+        run: |
+          echo "::error::contract watch state: ${{ steps.outcome.outputs.state }} (see the issue and the step summary)" >&2
+          exit 1

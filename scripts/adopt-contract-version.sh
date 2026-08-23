@@ -59,6 +59,7 @@ retire() {
   local pattern="$1"; shift
   local dir="$1"; shift
   shopt -s nullglob
+  # shellcheck disable=SC2206  # $pattern must glob here - expanding it is the point
   local found=("$dir"/$pattern)
   shopt -u nullglob
   for path in "${found[@]}"; do
