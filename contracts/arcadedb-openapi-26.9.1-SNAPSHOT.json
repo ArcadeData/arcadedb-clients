@@ -1562,6 +1562,14 @@
             "description": "Correlation id echoing X-Request-Id, for matching against server logs",
             "type": "string"
           },
+          "unavailableTypes": {
+            "description": "Measurements naming a time-series type whose storage engine failed to load; see the server log for why",
+            "items": {
+              "description": "Type name",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "unknownTypes": {
             "description": "Measurements naming a type that does not exist",
             "items": {

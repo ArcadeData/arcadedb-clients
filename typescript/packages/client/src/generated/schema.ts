@@ -1810,6 +1810,8 @@ export interface components {
             nonTimeSeriesTypes?: string[];
             /** @description Correlation id echoing X-Request-Id, for matching against server logs */
             requestId?: string;
+            /** @description Measurements naming a time-series type whose storage engine failed to load; see the server log for why */
+            unavailableTypes?: string[];
             /** @description Measurements naming a type that does not exist */
             unknownTypes?: string[];
             /** @description Samples successfully ingested */
