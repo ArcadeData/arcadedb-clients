@@ -18,6 +18,7 @@ from ._generated.models.query_response import QueryResponse
 from ._generated.models.server_info import ServerInfo
 from ._generated.types import Unset
 from ._internal.unwrap import is_success, unwrap
+from .aio import AsyncArcadeDBDatabase, AsyncArcadeDBServer, AsyncTransaction
 from .auth import basic_auth, bearer_auth
 from .errors import ArcadeDBError
 from .facade.data import (
@@ -36,6 +37,9 @@ __all__ = [
     "ArcadeDBDatabase",
     "ArcadeDBError",
     "ArcadeDBServer",
+    "AsyncArcadeDBDatabase",
+    "AsyncArcadeDBServer",
+    "AsyncTransaction",
     "QueryEnvelope",
     "QueryLanguage",
     "Transaction",
