@@ -21,11 +21,13 @@ if the checked-in generated code and a fresh regeneration disagree.
   - `@arcadedb/client`, the HTTP client. See `typescript/packages/client/README.md` for usage.
   - `@arcadedb/client-grpc`, the gRPC client. See `typescript/packages/client-grpc/README.md` for
     usage, including why it has no browser build.
+- `python/` - `arcadedb-client`, the HTTP client. See `python/packages/client/README.md` for
+  usage.
 - `scripts/fetch-contract.sh` - fetches the OpenAPI contract from a released ArcadeDB version or a
   running Docker image, or copies the Protobuf contract out of a local `arcadedb` checkout, and
   writes the result into `contracts/`. See "The contracts" below.
 
-`python/`, `go/`, and other language directories will appear here as siblings of `typescript/` as
+`go/` and other language directories will appear here as siblings of `typescript/` and `python/` as
 this repository grows; none exist yet.
 
 ## The contracts

@@ -5,15 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repository is
 
 Language clients for ArcadeDB's HTTP and gRPC APIs. One contract per API in `contracts/`, many
-language clients generated from it. Today the only language directory is `typescript/`;
-`python/`, `go/` and others will appear as its siblings.
+language clients generated from it. `typescript/` and `python/` are the language directories
+today; `go/` and others will appear as their siblings.
 
 The organising rule: **generated code is never hand-edited.** The contract is the single source of
 truth, and CI's *drift gate* regenerates from the committed contract and fails if the result
 differs from what is checked in. If a generated file looks wrong, fix the contract or the
 generator config — editing the output only makes CI red.
 
-See `typescript/CLAUDE.md` for the TypeScript workspace (commands, package layout, conventions).
+See `typescript/CLAUDE.md` for the TypeScript workspace and `python/CLAUDE.md` for the Python
+workspace (commands, package layout, conventions).
 
 ## The contracts
 
@@ -40,6 +41,11 @@ rewrites the version-stamped imports, and updates each package's `arcadedb.serve
 deliberately does not touch the compatibility tables in the READMEs — those rows are a historical
 record tied to a package version, and adding one is a human decision.
 
+`adopt-contract-version.sh` is language-aware: which files it rewrites is driven by an explicit
+`LANGUAGES` table (file suffixes and directories to skip, per language) rather than by crawling
+every top-level directory. Adding a language client to this repository is a deliberate one-line
+addition to that table, not something the script infers by finding a new sibling of `contracts/`.
+
 In `--release` / `--image` mode the fetched OpenAPI spec is rejected unless it is structurally
 post-M0 (the `/api/v1/begin/{database}` 204 response carrying the `arcadedb-session-id` header).
 A version string alone is not accepted as proof of a spec's content.
@@ -53,13 +59,25 @@ describes the contract itself and a future Python or Go client reads the same mo
   Node 20; then a separate e2e job on Node 24 (testcontainers@12 needs Node >= 22.22). Its `paths`
   filters include root `buf.yaml` and `.gitignore` on purpose: both can change generated output or
   silence the drift gate while leaving `typescript/` untouched.
+- `ci-python.yml` — the same shape for the Python client: lint, typecheck, and a three-part drift
+  gate (regenerate and diff, catch untracked new generated files, and verify the generator skipped
+  exactly the allowlisted endpoints via `scripts/check_codegen_skips.py`) on the declared floor
+  Python, then unit tests; a separate e2e job runs against a real container on a newer Python.
 - `contract-watch.yml` — daily, refreshes contracts from the SNAPSHOT server built off arcadedb's
   `main`. A changed contract gets an issue plus an adopt-and-regenerate PR; an unchanged contract
   with a red suite gets an issue only (it is a server regression no PR here can fix). Both are
-  filed idempotently against one tracking issue and one branch.
+  filed idempotently against one tracking issue and one branch. It now regenerates and verifies
+  **both** clients, not just the TypeScript one.
 - `publish.yml` — the only thing that talks to npm, and it is **manual workflow_dispatch only**.
   Nothing publishes on push, tag, or schedule. It re-verifies that the dispatch input, the
   package version, and the contract's `info.version` all agree before publishing.
+- `publish-python.yml` — the npm workflow's sibling, and the only thing that talks to PyPI; also
+  **manual workflow_dispatch only**, with the same dispatch-input/version/contract re-verification.
+  Its bootstrap story inverts npm's: PyPI supports pending publishers, so the trusted publisher for
+  `arcadedb-client` can be configured before the package exists on the index, and the first publish
+  needs no stored secret at all. See the workflow file's comments for the caveat that does carry
+  over from npm (check the workflow filename in PyPI's publisher settings against this file's
+  actual name whenever either changes).
 
 ## Design docs
 
