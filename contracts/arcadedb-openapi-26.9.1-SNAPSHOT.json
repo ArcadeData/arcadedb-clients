@@ -4886,7 +4886,7 @@
     },
     "/api/v1/login": {
       "post": {
-        "description": "Exchanges the credentials on the Authorization header for a session token prefixed 'AU-'. The token is then presented as a bearer token on subsequent requests. This operation takes no request body: the credentials travel on the header, and geolocation metadata is read from the CF-IPCountry, CF-IPCity, CF-Connecting-IP, X-Forwarded-For, and User-Agent headers when a proxy supplies them.",
+        "description": "Exchanges the credentials on the Authorization header for a session token prefixed 'AU-'. The token is then presented as a bearer token on subsequent requests. This operation takes no request body: the credentials travel on the header, and geolocation metadata is read from the CF-IPCountry, CF-IPCity, CF-Connecting-IP, X-Forwarded-For, and User-Agent headers when a proxy supplies them (each is stored truncated to 256 characters). Answers 503 when the server already holds 'arcadedb.server.httpAuthSessionMax' concurrent sessions and none could be reclaimed; a principal that reaches 'arcadedb.server.httpAuthSessionMaxPerUser' instead has its own oldest session evicted and still receives a token.",
         "operationId": "login",
         "responses": {
           "200": {
@@ -4943,6 +4943,21 @@
               }
             },
             "description": "Internal server error",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service unavailable",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestIdHeader"
@@ -6569,7 +6584,7 @@
     },
     "/api/v1/server/users": {
       "delete": {
-        "description": "Deletes a server user (root only)",
+        "description": "Deletes a server user (root only). On an HA cluster the removal is replicated to every node as a Raft entry.",
         "operationId": "deleteUser",
         "parameters": [
           {
@@ -6750,7 +6765,7 @@
         ]
       },
       "post": {
-        "description": "Creates a new server user (root only). Requires name (string) and password (min 8 chars).",
+        "description": "Creates a new server user (root only). Requires name (string) and password (min 8 chars). On an HA cluster the change is replicated to every node as a Raft entry.",
         "operationId": "createUser",
         "requestBody": {
           "content": {
@@ -6846,7 +6861,7 @@
         ]
       },
       "put": {
-        "description": "Updates an existing user's password and/or database assignments (root only)",
+        "description": "Updates an existing user's password and/or database assignments (root only). On an HA cluster the change is replicated to every node as a Raft entry.",
         "operationId": "updateUser",
         "parameters": [
           {
