@@ -541,7 +541,7 @@ export interface paths {
         put?: never;
         /**
          * Create an authentication session
-         * @description Exchanges the credentials on the Authorization header for a session token prefixed 'AU-'. The token is then presented as a bearer token on subsequent requests. This operation takes no request body: the credentials travel on the header, and geolocation metadata is read from the CF-IPCountry, CF-IPCity, CF-Connecting-IP, X-Forwarded-For, and User-Agent headers when a proxy supplies them.
+         * @description Exchanges the credentials on the Authorization header for a session token prefixed 'AU-'. The token is then presented as a bearer token on subsequent requests. This operation takes no request body: the credentials travel on the header, and geolocation metadata is read from the CF-IPCountry, CF-IPCity, CF-Connecting-IP, X-Forwarded-For, and User-Agent headers when a proxy supplies them (each is stored truncated to 256 characters). Answers 503 when the server already holds 'arcadedb.server.httpAuthSessionMax' concurrent sessions and none could be reclaimed; a principal that reaches 'arcadedb.server.httpAuthSessionMaxPerUser' instead has its own oldest session evicted and still receives a token.
          */
         post: operations["login"];
         delete?: never;
@@ -812,17 +812,17 @@ export interface paths {
         get: operations["listUsers"];
         /**
          * Update user
-         * @description Updates an existing user's password and/or database assignments (root only)
+         * @description Updates an existing user's password and/or database assignments (root only). On an HA cluster the change is replicated to every node as a Raft entry.
          */
         put: operations["updateUser"];
         /**
          * Create user
-         * @description Creates a new server user (root only). Requires name (string) and password (min 8 chars).
+         * @description Creates a new server user (root only). Requires name (string) and password (min 8 chars). On an HA cluster the change is replicated to every node as a Raft entry.
          */
         post: operations["createUser"];
         /**
          * Delete user
-         * @description Deletes a server user (root only)
+         * @description Deletes a server user (root only). On an HA cluster the removal is replicated to every node as a Raft entry.
          */
         delete: operations["deleteUser"];
         options?: never;
@@ -3917,6 +3917,16 @@ export interface operations {
             };
             /** @description Internal server error */
             500: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestIdHeader"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
                 headers: {
                     "X-Request-Id": components["headers"]["RequestIdHeader"];
                     [name: string]: unknown;
