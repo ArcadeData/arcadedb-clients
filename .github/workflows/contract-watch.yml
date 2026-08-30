@@ -127,17 +127,14 @@ jobs:
 
       - name: Set up Python
         working-directory: python
-        # 3.10, the declared floor (see python/pyproject.toml): this job runs
-        # every check the language has - lint, typecheck, drift gate, unit and
-        # e2e - in one pass rather than splitting floor and current the way
-        # ci-python.yml does, so it needs one interpreter that satisfies all of
-        # them, and the floor is the one every contributor's toolchain must
-        # already support.
-        run: uv python install 3.10
+        # 3.14, not the build job's 3.10: this job runs `pytest e2e`, and
+        # ci-python.yml splits its e2e into a separate job on 3.14 for exactly
+        # this reason; here one job does both, so it takes the higher floor.
+        run: uv python install 3.14
 
       - name: Install Python dependencies
         working-directory: python
-        run: uv sync --frozen --python 3.10
+        run: uv sync --frozen --python 3.14
 
       - name: Contract script tests
         run: ./scripts/tests/test-contract-scripts.sh
