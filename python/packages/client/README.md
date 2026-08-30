@@ -204,23 +204,33 @@ endpoints, cannot pass unnoticed.
 same generator limitation but is hand-written rather than left unwrapped, because a time-series
 namespace that could query samples but never ingest any would be an odd thing to ship.
 
-**Wrapped, but returning `dict[str, Any]` instead of a generated model.** `db.ts.query`,
-`db.ts.latest`, and `db.grafana.query` all call real, generated operations under the hood, but
-return the parsed JSON body directly rather than the generated response model. The cause is the
-same in all three: the contract types each of these responses' per-element scalar values (a
-timestamp, a numeric measurement, a DataFrame cell) as `"type": "object"`, so the generated
-per-element model's `from_dict` calls `dict(value)` on every element - which raises `TypeError` on
-an ordinary scalar like a float or an int. Left on the generated path, `db.ts.query`'s `oneOf`
-response parser catches that `TypeError` and silently falls through to the aggregated-response
-model, whose fields are all optional and so "parses" anything - every raw (non-aggregated) query
-response would come back mis-typed as an empty-looking aggregated one instead of raising.
-`db.ts.latest` and `db.grafana.query` have no such fallback and would simply raise `TypeError` on
-any real response. `@arcadedb/client`, the TypeScript sibling, is unaffected only because
-`openapi-fetch` performs no runtime validation of its own - the raw JSON passes through
-unexamined. Returning the parsed body directly here is the Python equivalent, and the only correct
-behaviour, until the contract is fixed upstream to type these fields correctly; these three
-methods will return generated models again once that happens. `db.promql.*` is unaffected by any
-of this and does return generated models today - its response schemas do not have this shape.
+**Wrapped, but returning `dict[str, Any]` instead of a generated model.** Unlike `batch`,
+`prom/read`, and `prom/write` above, these three routes describe a JSON body the generator *can*
+model, and it does generate operation functions and response models for them -
+`_generated/api/time_series/query_time_series.py`, `get_time_series_latest.py`, and
+`_generated/api/grafana/query_grafana.py` all exist on disk. But `db.ts.query`, `db.ts.latest`,
+and `db.grafana.query` do not call any of those generated operations - they are hand-written, and
+none of the three generated modules above is imported anywhere outside its own package. Each
+method builds the request URL itself and issues it directly through the same pooled httpx client
+the generated operations use (`self._client.get_httpx_client()`, or its async twin), returning the
+parsed JSON body rather than routing the response through a generated model at all.
+
+The reason is the same in all three: the contract types each of these responses' per-element
+scalar values (a timestamp, a numeric measurement, a DataFrame cell) as `"type": "object"`, so the
+generated per-element model's `from_dict` calls `dict(value)` on every element - which raises
+`TypeError` on an ordinary scalar like a float or an int. Had these methods routed through the
+generated operations instead, `db.ts.query`'s `oneOf` response parser would have caught that
+`TypeError` and silently fallen through to the aggregated-response model, whose fields are all
+optional and so "parses" anything - every raw (non-aggregated) query response would come back
+mis-typed as an empty-looking aggregated one instead of raising. `db.ts.latest` and
+`db.grafana.query` have no such fallback branch and would simply raise `TypeError` on any real
+response. `@arcadedb/client`, the TypeScript sibling, is unaffected only because `openapi-fetch`
+performs no runtime validation of its own - the raw JSON passes through unexamined. Bypassing the
+generated operations and returning the parsed body directly is the Python equivalent, and the only
+correct behaviour, until the contract is fixed upstream to type these fields correctly; fixing the
+contract is also what would let these three methods move onto the generated operations and return
+generated models, the same way `db.promql.*` already does - `db.promql.*` is unaffected by any of
+this today because its response schemas do not have this shape.
 
 ## Contract version and compatibility
 
