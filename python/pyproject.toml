@@ -39,7 +39,12 @@ exclude = "(^|/)_generated/"
 [[tool.mypy.overrides]]
 module = "arcadedb_client._generated.*"
 ignore_errors = true
-follow_imports = "skip"
+# NOT follow_imports = "skip": that would make every name imported from _generated
+# (Response, ErrorResponse, ...) resolve to `Any`, which erases the type parameter
+# hand-written code needs - e.g. `unwrap`'s `Response[T] -> T`. `exclude` above
+# already keeps this tree out of the top-level file list; `ignore_errors` keeps its
+# own (regenerated, unfixable) issues silent. Both are enough on their own -
+# `follow_imports = "skip"` only breaks downstream typing.
 
 [tool.pytest.ini_options]
 # e2e/ is excluded here and has its own invocation, so `pytest` never starts a
