@@ -33,6 +33,28 @@ def test_parses_every_expected_skip_together() -> None:
     assert parse_skips(stderr) == set(EXPECTED_SKIPS)
 
 
+def test_glued_streams_without_a_separator_would_lose_the_skip() -> None:
+    # `_SKIP` is `^`-anchored under `re.MULTILINE`. Bare `stdout + stderr`
+    # concatenation glues stderr's first line onto stdout's last whenever stdout
+    # has no trailing newline, which stops that line from matching `^WARNING
+    # parsing ...` - exactly the silent-drop failure mode this script exists to
+    # prevent, reproduced inside the script itself. `main()` therefore joins with
+    # `"\n".join((result.stdout, result.stderr))`, not `+`; this pins both halves
+    # of that fix - that a bare concatenation loses the skip, and the newline join
+    # recovers it.
+    stdout_no_trailing_newline = "some generator progress output, no trailing newline"
+    stderr_starting_with_a_skip = (
+        "WARNING parsing POST /api/v1/ts/{database}/write within time_series. "
+        "Endpoint will not be generated.\n\nUnsupported content type text/plain\n"
+    )
+
+    glued = stdout_no_trailing_newline + stderr_starting_with_a_skip
+    assert parse_skips(glued) == set()
+
+    joined = "\n".join((stdout_no_trailing_newline, stderr_starting_with_a_skip))
+    assert parse_skips(joined) == {"POST /api/v1/ts/{database}/write"}
+
+
 def test_the_allowlist_is_exactly_the_four_known_non_json_endpoints() -> None:
     assert (
         frozenset(

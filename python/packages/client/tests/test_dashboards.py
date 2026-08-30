@@ -1,7 +1,7 @@
 import httpx
 import pytest
 import respx
-from arcadedb_client import ArcadeDBError, ArcadeDBServer
+from arcadedb_client import ArcadeDBError, ArcadeDBServer, AsyncArcadeDBServer
 
 BASE_URL = "http://db.test"
 
@@ -42,6 +42,73 @@ def test_grafana_query_raises_on_a_non_2xx() -> None:
         srv.db("mydb").grafana.query(body={"targets": [{"type": "does-not-exist"}]})
 
     assert caught.value.error == "unknown time-series type"
+
+
+@respx.mock
+def test_promql_query_sends_exactly_the_generated_operations_parameters() -> None:
+    # `promql.query` used to accept `**kwargs: Any` and forward every one of them
+    # straight into `prom_ql_query.sync_detailed`, which opted this call site out
+    # of mypy --strict. Now it names `query`/`time`/`lookback_delta` explicitly,
+    # matching the generated operation; this pins the query string it sends.
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/prom/api/v1/query").mock(
+        return_value=httpx.Response(200, json={"status": "success", "data": {}})
+    )
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("mydb").promql.query(query="up", time="2024-01-01T00:00:00Z")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"query": "up", "time": "2024-01-01T00:00:00Z"}
+
+
+def test_promql_query_rejects_an_unknown_keyword_at_call_time() -> None:
+    with ArcadeDBServer(base_url=BASE_URL) as srv, pytest.raises(TypeError):
+        srv.db("mydb").promql.query(query="up", timestamp="2024-01-01T00:00:00Z")  # type: ignore[call-arg]
+
+
+@respx.mock
+def test_promql_query_range_sends_exactly_the_generated_operations_parameters() -> None:
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/prom/api/v1/query_range").mock(
+        return_value=httpx.Response(200, json={"status": "success", "data": {}})
+    )
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("mydb").promql.query_range(query="up", start="0", end="60", step="15")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"query": "up", "start": "0", "end": "60", "step": "15"}
+
+
+@respx.mock
+def test_promql_series_sends_exactly_the_generated_operations_parameters() -> None:
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/prom/api/v1/series").mock(
+        return_value=httpx.Response(200, json={"status": "success", "data": []})
+    )
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("mydb").promql.series(match=["up", "down"])
+
+    params = route.calls.last.request.url.params
+    assert params.get_list("match[]") == ["up", "down"]
+    assert "start" not in params
+    assert "end" not in params
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_promql_query_sends_exactly_the_generated_operations_parameters() -> None:
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/prom/api/v1/query").mock(
+        return_value=httpx.Response(200, json={"status": "success", "data": {}})
+    )
+    async with AsyncArcadeDBServer(base_url=BASE_URL) as srv:
+        await srv.db("mydb").promql.query(query="up")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"query": "up"}
+
+
+@pytest.mark.asyncio
+async def test_async_promql_query_rejects_an_unknown_keyword_at_call_time() -> None:
+    async with AsyncArcadeDBServer(base_url=BASE_URL) as srv:
+        with pytest.raises(TypeError):
+            await srv.db("mydb").promql.query(query="up", timestamp="now")  # type: ignore[call-arg]
 
 
 @respx.mock

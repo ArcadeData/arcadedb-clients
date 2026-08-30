@@ -34,6 +34,7 @@ from urllib.parse import quote
 import httpx
 
 from .._generated.client import Client
+from .._generated.types import UNSET, Unset
 from ..errors import REQUEST_ID_HEADER, ArcadeDBError
 
 #: Unit of the timestamps in a line-protocol payload. Defaults to nanoseconds server-side when omitted.
@@ -63,10 +64,14 @@ def _json_response(raw: httpx.Response) -> dict[str, Any]:
     return body
 
 
-def _latest_params(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Translates the `type_` keyword (matching the generated operation's Python identifier,
-    since `type` is a keyword) to the contract's `type` query parameter, and drops anything unset."""
-    return {("type" if key == "type_" else key): value for key, value in kwargs.items() if value is not None}
+def _latest_params(*, type_: str, tag: str | Unset) -> dict[str, Any]:
+    """Builds the query parameters for `GET .../latest` from `latest`'s own keyword
+    parameters - mirroring the generated `get_time_series_latest._get_kwargs`, which this
+    method cannot call directly (see the module docstring): `type_` (matching the generated
+    operation's Python identifier, since `type` is a keyword) becomes the wire name `type`,
+    and `tag` is dropped when left `UNSET`."""
+    params: dict[str, Any] = {"type": type_, "tag": tag}
+    return {key: value for key, value in params.items() if value is not UNSET and value is not None}
 
 
 class TimeSeriesNamespace:
@@ -101,8 +106,14 @@ class TimeSeriesNamespace:
         raw = self._client.get_httpx_client().post(f"/api/v1/ts/{quote(self._database, safe='')}/query", json=body)
         return _json_response(raw)
 
-    def latest(self, **kwargs: Any) -> dict[str, Any]:
+    def latest(self, *, type_: str, tag: str | Unset = UNSET) -> dict[str, Any]:
         """Returns the most recent sample per series.
+
+        `type_` and `tag` are exactly `get_time_series_latest`'s generated keyword
+        parameters (`type_` because `type` is a Python keyword) - see the module
+        docstring for why this bypasses the generated operation itself while still
+        matching its signature, rather than accepting arbitrary `**kwargs` that the
+        server would silently ignore if misspelled.
 
         Returns the parsed JSON body unaltered rather than the generated
         `TimeSeriesLatestResponse` - see the module docstring: the contract types
@@ -110,7 +121,7 @@ class TimeSeriesNamespace:
         raises `TypeError` on an ordinary response.
         """
         raw = self._client.get_httpx_client().get(
-            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(kwargs)
+            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(type_=type_, tag=tag)
         )
         return _json_response(raw)
 
@@ -139,9 +150,9 @@ class AsyncTimeSeriesNamespace:
         )
         return _json_response(raw)
 
-    async def latest(self, **kwargs: Any) -> dict[str, Any]:
+    async def latest(self, *, type_: str, tag: str | Unset = UNSET) -> dict[str, Any]:
         """Returns the most recent sample per series."""
         raw = await self._client.get_async_httpx_client().get(
-            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(kwargs)
+            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(type_=type_, tag=tag)
         )
         return _json_response(raw)

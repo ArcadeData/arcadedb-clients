@@ -194,16 +194,24 @@ for pkg in sorted((root / "typescript").glob("packages/*/package.json")):
 
 # pyproject.toml carries server-version as real data. Python has tomllib for
 # reading and no stdlib writer, so this is a targeted line substitution that
-# asserts it matched exactly once - a malformed or duplicated key fails loudly
-# rather than silently leaving a stale version behind.
+# asserts it matched exactly once - a malformed, duplicated, or missing key fails
+# loudly rather than silently leaving a stale version behind. Note this means
+# pyproject.toml is processed TWICE: once above by the generic prose pass (it
+# matches the ".toml" suffix, so any bare version mention in a comment gets
+# repointed there), and again here by this dedicated pass over the
+# `server-version` key specifically. That is deliberate, not redundant - the
+# duplicate-detection below counts how many times the KEY appears, not how many
+# times the VALUE (a version string) appears in the file, which the generic pass
+# cannot do. A future reader "simplifying" this by dropping the dedicated pass
+# would lose that guard.
 PYPROJECT_SERVER_VERSION = re.compile(r'^(server-version\s*=\s*")[^"]*(")', re.MULTILINE)
 
 for pyproject in sorted((root / "python").glob("packages/*/pyproject.toml")):
     original = pyproject.read_text()
     updated, count = PYPROJECT_SERVER_VERSION.subn(rf"\g<1>{version}\g<2>", original)
-    if count > 1:
+    if count != 1:
         raise SystemExit(f"{pyproject} has {count} server-version keys; expected exactly one")
-    if count == 1 and updated != original:
+    if updated != original:
         pyproject.write_text(updated)
         changed.append(pyproject.relative_to(root))
 

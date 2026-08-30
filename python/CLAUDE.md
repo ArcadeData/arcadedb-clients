@@ -57,11 +57,16 @@ fails CI.
 
 ## Two facades, one generated layer
 
-`facade/*.py` (synchronous) and `aio.py` (`Async*`, asynchronous) are hand-written and share the
-same generated `_generated/` tree - every generated operation emits both a `sync_detailed` and an
+The synchronous facade and `aio.py` (`Async*`, asynchronous) are hand-written and share the same
+generated `_generated/` tree - every generated operation emits both a `sync_detailed` and an
 `asyncio_detailed` function returning the same `Response` shape, so the two facades differ only in
 which call style they use and both funnel through the same request-building and
-envelope-normalising helpers in `facade/data.py`.
+envelope-normalising helpers in `facade/data.py`. The sync/async split does not line up with the
+module split: most sync classes live under `facade/` (`ArcadeDBDatabase` in `__init__.py`,
+`Transaction` in `facade/transaction.py`) while their `Async*` twins live in `aio.py`, but
+`facade/timeseries.py` and `facade/dashboards.py` each hold both their sync and async classes
+side by side. Don't assume "facade/" means sync-only or "aio.py" means every async class - check
+the class name, not the file it happens to be in.
 
 The duplication between the sync and async facades is mechanical and deliberate.
 [`unasync`](https://github.com/python-trio/unasync)-style single-source generation (write async,
@@ -71,11 +76,15 @@ step and a second thing that can drift, to remove duplication that mypy already 
 
 ## Deliberate asymmetries
 
-- **The facade raises; `.raw` does not.** Every facade method (`query`, `command`, `transaction`,
-  `list_databases`, `exists`, `server_info`, `health`, `ready`, the `ts`/`grafana`/`promql`
-  namespaces, ...) raises `ArcadeDBError` on a non-2xx response. `ArcadeDBServer.raw` - the
-  generated `Client` - never raises anything; every one of its operations returns a `Response`
-  whose `status_code` and `parsed` the caller inspects directly. This mirrors
+- **The facade raises; `.raw` does not, for a non-2xx status.** Every facade method (`query`,
+  `command`, `transaction`, `list_databases`, `exists`, `server_info`, `health`, `ready`, the
+  `ts`/`grafana`/`promql` namespaces, ...) raises `ArcadeDBError` on a non-2xx response.
+  `ArcadeDBServer.raw` - the generated `Client` - never raises for a non-2xx status; every one of
+  its operations returns a `Response` whose `status_code` and `parsed` the caller inspects
+  directly. That guarantee does not extend to a malformed *2xx* body: the generated model's
+  `from_dict` can still raise out of the parser on a 200 response that does not match its declared
+  shape - see "Two contract defects this milestone uncovered" below for a real one
+  (`POST /api/v1/server`). This mirrors
   `@arcadedb/client`'s `raw`/facade split (`{ data, error }` vs. throwing). Do not blur it: a
   caller mixing assumptions about which surface they are calling is the most common way to end up
   with either an unhandled exception or a silently ignored error.
@@ -84,6 +93,16 @@ step and a second thing that can drift, to remove duplication that mypy already 
   model (reachable through `.raw`) - `help` alone would shadow the Python builtin, and giving the
   same field two different spellings across the package's two error surfaces would be worse than
   one consistently awkward name. See `errors.py`.
+- **Omitting `timeout` disables timeouts entirely.** `ArcadeDBServer.__init__` and
+  `AsyncArcadeDBServer.__init__` both declare `timeout: httpx.Timeout | None = None` and pass it
+  straight to the generated `Client`, which forwards it to `httpx.Client`/`httpx.AsyncClient`. In
+  httpx an explicit `timeout=None` means NO TIMEOUT, not "use httpx's 5-second default" - a caller
+  who never passes `timeout` gets a client that can hang forever on a stalled connection. This is
+  deliberate, not a bug to quietly fix by changing the default: the generated `Client` itself
+  defaults `_timeout` to `None` and passes it through the same way, so a facade-only default would
+  make `ArcadeDBServer` and `.raw` disagree against the same server, and it preserves parity with
+  `@arcadedb/client`, where `fetch` has no default timeout either. Pass an `httpx.Timeout` to
+  bound requests.
 - **`auth.py` is three lines where `auth.ts` is sixty; do not port the workaround.** `auth.ts`
   spends most of its length working around `btoa`: it treats input as Latin-1 and throws on
   anything above U+00FF, and a naive `String.fromCharCode(...bytes)` blows the call stack on a

@@ -106,6 +106,17 @@ finally:
     srv.close()
 ```
 
+Both constructors take a `timeout: httpx.Timeout | None = None`, and omitting it disables
+timeouts entirely - it is not "use httpx's default" (5 seconds), it is no timeout at all, because
+in httpx an explicit `timeout=None` means exactly that. This is deliberate: the generated `Client`
+these facades wrap defaults its own timeout to `None` and forwards it the same way, and
+`@arcadedb/client` has no default timeout either, since `fetch` doesn't have one. Pass an
+`httpx.Timeout` if you want requests bounded:
+
+```python
+srv = ArcadeDBServer(base_url="http://localhost:2480", timeout=httpx.Timeout(5.0))
+```
+
 ## Transactions
 
 ```python

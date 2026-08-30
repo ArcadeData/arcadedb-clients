@@ -80,8 +80,12 @@ def main() -> int:
         return result.returncode
 
     # The generator writes warnings to stdout in some versions and stderr in others;
-    # reading both is cheaper than depending on which.
-    found = parse_skips(result.stdout + result.stderr)
+    # reading both is cheaper than depending on which. Joined with a newline, not
+    # concatenated directly: `_SKIP` is `^`-anchored under `re.MULTILINE`, so if
+    # stdout lacks a trailing newline, a bare `+` glues stderr's first line onto
+    # stdout's last and it can no longer match `^WARNING parsing ...` - silently
+    # dropping a skip this script exists to catch.
+    found = parse_skips("\n".join((result.stdout, result.stderr)))
     if found == set(EXPECTED_SKIPS):
         print(f"OK: the generator skipped exactly the {len(found)} allowlisted operations.")
         return 0

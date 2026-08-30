@@ -270,6 +270,17 @@ printf '[tool.arcadedb]\nserver-version = "26.9.1-SNAPSHOT"\nserver-version = "2
 check "$rc" "1" "refuses a pyproject.toml carrying two server-version keys"
 rm -rf "$FIX"
 
+# The mirror-image case: a pyproject.toml missing the key entirely (e.g. a
+# single-quoted TOML value, a mangled merge) must fail loudly too, not be
+# silently accepted as "nothing to update".
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+printf '[tool.arcadedb]\n' > "$FIX/python/packages/client/pyproject.toml"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "1" "refuses a pyproject.toml with no server-version key"
+rm -rf "$FIX"
+
 echo "contract-watch.yml wiring"
 
 # The script gaining a capability and the workflow USING it are two different

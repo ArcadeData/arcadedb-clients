@@ -34,6 +34,7 @@ from .._generated.client import Client
 from .._generated.models.prom_ql_data_response import PromQLDataResponse
 from .._generated.models.prom_ql_labels_response import PromQLLabelsResponse
 from .._generated.models.prom_ql_series_response import PromQLSeriesResponse
+from .._generated.types import UNSET, Unset
 from .._internal.unwrap import unwrap
 from ..errors import REQUEST_ID_HEADER, ArcadeDBError
 
@@ -73,15 +74,33 @@ class PromQLNamespace:
         self._client = client
         self._database = database
 
-    def query(self, **kwargs: Any) -> PromQLDataResponse:
+    def query(
+        self, *, query: str, time: str | Unset = UNSET, lookback_delta: str | Unset = UNSET
+    ) -> PromQLDataResponse:
         """Evaluates a PromQL expression at one instant."""
-        data = unwrap(prom_ql_query.sync_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            prom_ql_query.sync_detailed(
+                self._database, client=self._client, query=query, time=time, lookback_delta=lookback_delta
+            )
+        )
         assert isinstance(data, PromQLDataResponse)
         return data
 
-    def query_range(self, **kwargs: Any) -> PromQLDataResponse:
+    def query_range(
+        self, *, query: str, start: str, end: str, step: str, lookback_delta: str | Unset = UNSET
+    ) -> PromQLDataResponse:
         """Evaluates a PromQL expression at every step across a range."""
-        data = unwrap(prom_ql_query_range.sync_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            prom_ql_query_range.sync_detailed(
+                self._database,
+                client=self._client,
+                query=query,
+                start=start,
+                end=end,
+                step=step,
+                lookback_delta=lookback_delta,
+            )
+        )
         assert isinstance(data, PromQLDataResponse)
         return data
 
@@ -91,9 +110,11 @@ class PromQLNamespace:
         assert isinstance(data, PromQLLabelsResponse)
         return data
 
-    def series(self, **kwargs: Any) -> PromQLSeriesResponse:
+    def series(self, *, match: list[str], start: str | Unset = UNSET, end: str | Unset = UNSET) -> PromQLSeriesResponse:
         """Returns the label sets of the series matching the given `match[]` selectors."""
-        data = unwrap(prom_ql_series.sync_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            prom_ql_series.sync_detailed(self._database, client=self._client, match=match, start=start, end=end)
+        )
         assert isinstance(data, PromQLSeriesResponse)
         return data
 
@@ -120,15 +141,33 @@ class AsyncPromQLNamespace:
         self._client = client
         self._database = database
 
-    async def query(self, **kwargs: Any) -> PromQLDataResponse:
+    async def query(
+        self, *, query: str, time: str | Unset = UNSET, lookback_delta: str | Unset = UNSET
+    ) -> PromQLDataResponse:
         """Evaluates a PromQL expression at one instant."""
-        data = unwrap(await prom_ql_query.asyncio_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            await prom_ql_query.asyncio_detailed(
+                self._database, client=self._client, query=query, time=time, lookback_delta=lookback_delta
+            )
+        )
         assert isinstance(data, PromQLDataResponse)
         return data
 
-    async def query_range(self, **kwargs: Any) -> PromQLDataResponse:
+    async def query_range(
+        self, *, query: str, start: str, end: str, step: str, lookback_delta: str | Unset = UNSET
+    ) -> PromQLDataResponse:
         """Evaluates a PromQL expression at every step across a range."""
-        data = unwrap(await prom_ql_query_range.asyncio_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            await prom_ql_query_range.asyncio_detailed(
+                self._database,
+                client=self._client,
+                query=query,
+                start=start,
+                end=end,
+                step=step,
+                lookback_delta=lookback_delta,
+            )
+        )
         assert isinstance(data, PromQLDataResponse)
         return data
 
@@ -138,8 +177,14 @@ class AsyncPromQLNamespace:
         assert isinstance(data, PromQLLabelsResponse)
         return data
 
-    async def series(self, **kwargs: Any) -> PromQLSeriesResponse:
+    async def series(
+        self, *, match: list[str], start: str | Unset = UNSET, end: str | Unset = UNSET
+    ) -> PromQLSeriesResponse:
         """Returns the label sets of the series matching the given `match[]` selectors."""
-        data = unwrap(await prom_ql_series.asyncio_detailed(self._database, client=self._client, **kwargs))
+        data = unwrap(
+            await prom_ql_series.asyncio_detailed(
+                self._database, client=self._client, match=match, start=start, end=end
+            )
+        )
         assert isinstance(data, PromQLSeriesResponse)
         return data

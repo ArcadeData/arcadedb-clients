@@ -142,6 +142,16 @@ class ArcadeDBServer:
     This is a context manager because the underlying httpx client owns a connection
     pool that must be released - a concern `@arcadedb/client` does not have, since
     `fetch` owns nothing. Use `with`, or call `close()` yourself.
+
+    `timeout` defaults to `None`, and in httpx an explicit `None` means NO
+    TIMEOUT - not "use httpx's default", which is 5 seconds. Omitting `timeout`
+    therefore leaves requests free to hang forever on a stalled connection. This
+    is deliberate, not an oversight: the generated `Client` this facade wraps
+    defaults its own timeout to `None` and forwards it exactly the same way, so
+    changing only the facade's default would make `ArcadeDBServer` and `.raw`
+    disagree against the same server; it also matches `@arcadedb/client`, where
+    `fetch` has no default timeout either. Pass an `httpx.Timeout` to bound
+    requests.
     """
 
     def __init__(

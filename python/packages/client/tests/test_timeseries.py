@@ -84,6 +84,41 @@ def test_latest_returns_the_parsed_json_body_and_translates_type_to_the_query_pa
 
 
 @respx.mock
+def test_latest_sends_exactly_the_generated_operations_parameters() -> None:
+    # Pins `latest`'s query string to exactly `get_time_series_latest`'s generated
+    # keyword parameters (`type_`/`tag`), and no others - `latest` used to accept
+    # `**kwargs: Any` and forward every one of them into the query string with no
+    # allowlist, so a caller misspelling e.g. `tags=` instead of `tag=` got a
+    # request that silently omitted filtering rather than an error.
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/latest").mock(return_value=httpx.Response(200, json={"latest": None}))
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("mydb").ts.latest(type_="cpu", tag="host=a")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"type": "cpu", "tag": "host=a"}
+
+
+@respx.mock
+def test_latest_omits_tag_when_not_supplied() -> None:
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/latest").mock(return_value=httpx.Response(200, json={"latest": None}))
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("mydb").ts.latest(type_="cpu")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"type": "cpu"}
+
+
+def test_latest_rejects_an_unknown_keyword_at_call_time() -> None:
+    # `latest` no longer accepts `**kwargs: Any`, so a misspelled/unknown keyword
+    # (e.g. `tags=` instead of `tag=`) is now a `TypeError` at the call site - and,
+    # more importantly, a mypy --strict error at the call site before the code
+    # ever runs - rather than a silently-ignored query parameter the server just
+    # never received.
+    with ArcadeDBServer(base_url=BASE_URL) as srv, pytest.raises(TypeError):
+        srv.db("mydb").ts.latest(type_="cpu", tags="host=a")  # type: ignore[call-arg]
+
+
+@respx.mock
 def test_latest_raises_on_a_non_2xx() -> None:
     respx.get(f"{BASE_URL}/api/v1/ts/mydb/latest").mock(
         return_value=httpx.Response(404, json={"error": "unknown time-series type"})
@@ -116,3 +151,21 @@ async def test_async_write_posts_line_protocol() -> None:
         await srv.db("mydb").ts.write(line_protocol="cpu value=1 1700000000000")
 
     assert route.calls.last.request.headers["Content-Type"].startswith("text/plain")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_latest_sends_exactly_the_generated_operations_parameters() -> None:
+    route = respx.get(f"{BASE_URL}/api/v1/ts/mydb/latest").mock(return_value=httpx.Response(200, json={"latest": None}))
+    async with AsyncArcadeDBServer(base_url=BASE_URL) as srv:
+        await srv.db("mydb").ts.latest(type_="cpu", tag="host=a")
+
+    params = dict(route.calls.last.request.url.params)
+    assert params == {"type": "cpu", "tag": "host=a"}
+
+
+@pytest.mark.asyncio
+async def test_async_latest_rejects_an_unknown_keyword_at_call_time() -> None:
+    async with AsyncArcadeDBServer(base_url=BASE_URL) as srv:
+        with pytest.raises(TypeError):
+            await srv.db("mydb").ts.latest(type_="cpu", tags="host=a")  # type: ignore[call-arg]
