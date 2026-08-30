@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Mapping
+from functools import cached_property
 from types import TracebackType
 from typing import Any, Literal
 
@@ -30,6 +31,7 @@ from ._generated.models.server_info import ServerInfo
 from ._generated.types import Unset
 from ._internal.unwrap import is_success, unwrap
 from .errors import ArcadeDBError
+from .facade.dashboards import AsyncGrafanaNamespace, AsyncPromQLNamespace
 from .facade.data import (
     SESSION_HEADER,
     QueryEnvelope,
@@ -39,6 +41,7 @@ from .facade.data import (
     session_kwarg,
     to_envelope,
 )
+from .facade.timeseries import AsyncTimeSeriesNamespace
 
 __all__ = ["AsyncArcadeDBDatabase", "AsyncArcadeDBServer", "AsyncTransaction"]
 
@@ -172,6 +175,21 @@ class AsyncArcadeDBDatabase:
     def transaction(self) -> AsyncTransaction:
         """Runs a block inside a server-side transaction; see `AsyncTransaction`."""
         return AsyncTransaction(self._client, self.name)
+
+    @cached_property
+    def ts(self) -> AsyncTimeSeriesNamespace:
+        """Ingests and queries samples in a time-series type."""
+        return AsyncTimeSeriesNamespace(self._client, self.name)
+
+    @cached_property
+    def grafana(self) -> AsyncGrafanaNamespace:
+        """Grafana panel queries over a time-series type."""
+        return AsyncGrafanaNamespace(self._client, self.name)
+
+    @cached_property
+    def promql(self) -> AsyncPromQLNamespace:
+        """A Prometheus-compatible query surface over a time-series type."""
+        return AsyncPromQLNamespace(self._client, self.name)
 
 
 class AsyncArcadeDBServer:
