@@ -29,24 +29,25 @@ reintroduce the silent misclassification.
 from __future__ import annotations
 
 from typing import Any, Literal
+from urllib.parse import quote
 
 import httpx
 
 from .._generated.client import Client
-from ..errors import ArcadeDBError
+from ..errors import REQUEST_ID_HEADER, ArcadeDBError
 
 #: Unit of the timestamps in a line-protocol payload. Defaults to nanoseconds server-side when omitted.
 Precision = Literal["ns", "us", "ms", "s"]
 
 
 def _write_url(database: str) -> str:
-    return f"/api/v1/ts/{database}/write"
+    return f"/api/v1/ts/{quote(database, safe='')}/write"
 
 
 def _raise_for_status(raw: httpx.Response) -> None:
     """Raises `ArcadeDBError` unless the server answered 2xx."""
     if not 200 <= raw.status_code < 300:
-        raise ArcadeDBError(raw.status_code, raw.content, raw.headers.get("X-Request-Id"))
+        raise ArcadeDBError(raw.status_code, raw.content, raw.headers.get(REQUEST_ID_HEADER))
 
 
 def _write_response(raw: httpx.Response) -> None:
@@ -97,7 +98,7 @@ class TimeSeriesNamespace:
         values as `"type": "object"`, which makes the generated model misparse
         (silently, for the raw shape) every realistic response.
         """
-        raw = self._client.get_httpx_client().post(f"/api/v1/ts/{self._database}/query", json=body)
+        raw = self._client.get_httpx_client().post(f"/api/v1/ts/{quote(self._database, safe='')}/query", json=body)
         return _json_response(raw)
 
     def latest(self, **kwargs: Any) -> dict[str, Any]:
@@ -108,7 +109,9 @@ class TimeSeriesNamespace:
         `latest`'s scalar values as `"type": "object"`, so the generated model
         raises `TypeError` on an ordinary response.
         """
-        raw = self._client.get_httpx_client().get(f"/api/v1/ts/{self._database}/latest", params=_latest_params(kwargs))
+        raw = self._client.get_httpx_client().get(
+            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(kwargs)
+        )
         return _json_response(raw)
 
 
@@ -131,12 +134,14 @@ class AsyncTimeSeriesNamespace:
 
     async def query(self, *, body: dict[str, Any]) -> dict[str, Any]:
         """Queries samples, optionally aggregated into buckets."""
-        raw = await self._client.get_async_httpx_client().post(f"/api/v1/ts/{self._database}/query", json=body)
+        raw = await self._client.get_async_httpx_client().post(
+            f"/api/v1/ts/{quote(self._database, safe='')}/query", json=body
+        )
         return _json_response(raw)
 
     async def latest(self, **kwargs: Any) -> dict[str, Any]:
         """Returns the most recent sample per series."""
         raw = await self._client.get_async_httpx_client().get(
-            f"/api/v1/ts/{self._database}/latest", params=_latest_params(kwargs)
+            f"/api/v1/ts/{quote(self._database, safe='')}/latest", params=_latest_params(kwargs)
         )
         return _json_response(raw)

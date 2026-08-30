@@ -20,6 +20,7 @@ httpx client so auth headers, timeout and connection pooling still apply. Do not
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -34,14 +35,14 @@ from .._generated.models.prom_ql_data_response import PromQLDataResponse
 from .._generated.models.prom_ql_labels_response import PromQLLabelsResponse
 from .._generated.models.prom_ql_series_response import PromQLSeriesResponse
 from .._internal.unwrap import unwrap
-from ..errors import ArcadeDBError
+from ..errors import REQUEST_ID_HEADER, ArcadeDBError
 
 
 def _json_response(raw: httpx.Response) -> dict[str, Any]:
     """Raises `ArcadeDBError` unless the server answered 2xx; otherwise returns the parsed JSON
     body unaltered. Bypasses the generated response model - see the module docstring."""
     if not 200 <= raw.status_code < 300:
-        raise ArcadeDBError(raw.status_code, raw.content, raw.headers.get("X-Request-Id"))
+        raise ArcadeDBError(raw.status_code, raw.content, raw.headers.get(REQUEST_ID_HEADER))
     body: dict[str, Any] = raw.json()
     return body
 
@@ -59,7 +60,9 @@ class GrafanaNamespace:
         Returns the parsed JSON body unaltered rather than the generated
         `GrafanaQueryResponse` - see the module docstring.
         """
-        raw = self._client.get_httpx_client().post(f"/api/v1/ts/{self._database}/grafana/query", json=body)
+        raw = self._client.get_httpx_client().post(
+            f"/api/v1/ts/{quote(self._database, safe='')}/grafana/query", json=body
+        )
         return _json_response(raw)
 
 
@@ -104,7 +107,9 @@ class AsyncGrafanaNamespace:
 
     async def query(self, *, body: dict[str, Any]) -> dict[str, Any]:
         """Executes one query per `targets` entry, returning DataFrames keyed by `refId`."""
-        raw = await self._client.get_async_httpx_client().post(f"/api/v1/ts/{self._database}/grafana/query", json=body)
+        raw = await self._client.get_async_httpx_client().post(
+            f"/api/v1/ts/{quote(self._database, safe='')}/grafana/query", json=body
+        )
         return _json_response(raw)
 
 

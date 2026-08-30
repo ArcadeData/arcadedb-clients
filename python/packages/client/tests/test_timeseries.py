@@ -94,6 +94,20 @@ def test_latest_raises_on_a_non_2xx() -> None:
     assert caught.value.error == "unknown time-series type"
 
 
+@respx.mock
+def test_write_escapes_a_database_name_needing_it() -> None:
+    # `ArcadeDBServer.db(name)` accepts an arbitrary caller-supplied string with no
+    # sanitisation. A name containing `/` must be percent-encoded on the wire - not
+    # left to act as a path separator - the same property `quote(..., safe="")`
+    # gives every generated operation (see e.g. query_time_series.py).
+    route = respx.post(f"{BASE_URL}/api/v1/ts/a%2Fb/write").mock(return_value=httpx.Response(204))
+    with ArcadeDBServer(base_url=BASE_URL) as srv:
+        srv.db("a/b").ts.write(line_protocol="cpu value=1 1700000000000")
+
+    assert route.called
+    assert route.calls.last.request.url.raw_path == b"/api/v1/ts/a%2Fb/write"
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_async_write_posts_line_protocol() -> None:
