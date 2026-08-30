@@ -14,8 +14,8 @@
 # every single day while claiming to be quiet - the exact opposite of the design,
 # and indistinguishable from it in the code until someone reads the run id.
 #
-# Consumes, from the environment: STATE, VERSION, IMAGE, VERIFY, RUN_URL,
-# TRACKING_LABEL, REFRESH_BRANCH, GH_TOKEN.
+# Consumes, from the environment: STATE, VERSION, IMAGE, VERIFY_TS, VERIFY_PY,
+# RUN_URL, TRACKING_LABEL, REFRESH_BRANCH, GH_TOKEN.
 #
 # Sourceable: the pure functions below can be tested without gh or a network.
 set -euo pipefail
@@ -23,20 +23,33 @@ set -euo pipefail
 : "${TRACKING_LABEL:=contract-drift}" "${REFRESH_BRANCH:=chore/contract-refresh}"
 REPO="${GITHUB_REPOSITORY:-ArcadeData/arcadedb-clients}"
 
+# Per-language, so the issue and PR bodies name WHICH client broke rather than
+# just asserting that something did - "the suite fails" is not actionable, but
+# "the Python client fails" tells a reader where to start.
 verify_line() {
-  if [[ "${VERIFY:-}" == "success" ]]; then
-    echo "The client builds and its full suite passes against \`${IMAGE:-}\`."
-  else
-    echo "**The client's suite FAILS against \`${IMAGE:-}\`.** See the run for which stage."
+  local ts="${VERIFY_TS:-}" py="${VERIFY_PY:-}"
+  if [[ "$ts" == "success" && "$py" == "success" ]]; then
+    echo "Both clients build and their full suites pass against \`${IMAGE:-}\`."
+    return
   fi
+  echo "**One or more clients FAIL against \`${IMAGE:-}\`.** See the run for which stage."
+  echo
+  [[ "$ts" == "success" ]] && echo "- \`@arcadedb/client\` (TypeScript): passing" || echo "- \`@arcadedb/client\` (TypeScript): **failing**"
+  [[ "$py" == "success" ]] && echo "- \`arcadedb-client\` (Python): passing" || echo "- \`arcadedb-client\` (Python): **failing**"
 }
 
 # Everything that makes this finding what it is, and nothing that merely makes
 # this RUN what it is. Two runs a day apart that found the same thing produce the
 # same fingerprint; a run that found something different does not.
+#
+# BOTH verdicts feed the fingerprint. If only one did, TypeScript recovering
+# while Python stayed red would produce an identical fingerprint to the run
+# before it, and report_finding would silently decline to comment on a finding
+# that genuinely changed - the exact failure the fingerprint exists to prevent,
+# in a new disguise.
 finding_fingerprint() {
-  printf '%s\n%s\n%s\n%s\n' \
-    "${STATE:-}" "${VERSION:-}" "${VERIFY:-}" "${CHANGED_FILES:-}" \
+  printf '%s\n%s\n%s\n%s\n%s\n' \
+    "${STATE:-}" "${VERSION:-}" "${VERIFY_TS:-}" "${VERIFY_PY:-}" "${CHANGED_FILES:-}" \
     | shasum -a 256 | cut -c1-16
 }
 
@@ -72,8 +85,10 @@ MD
       ;;
     behaviour-regression)
       cat <<MD
-The contract is **byte-identical** to the one committed here, and the client's
-suite still fails against \`$IMAGE\`.
+The contract is **byte-identical** to the one committed here, and at least one
+client's suite still fails against \`$IMAGE\`.
+
+$(verify_line)
 
 That combination is the interesting one. The server's behaviour moved under a
 contract that did not, so nothing in this repository can fix it and there is no
@@ -90,7 +105,7 @@ MD
   echo "Snapshot version: \`$VERSION\` · [workflow run]($RUN_URL)"
   echo
   echo "_Maintained by \`.github/workflows/contract-watch.yml\`. Updated in place, and closed"
-  echo "automatically by the first run that finds the contract current and the suite green._"
+  echo "automatically by the first run that finds the contract current and both suites green._"
 }
 
 open_tracking_issue() {
@@ -107,7 +122,7 @@ close_if_resolved() {
   issue="$(open_tracking_issue)"
   [[ -z "$issue" ]] && return 0
   gh issue close "$issue" --repo "$REPO" --comment \
-    "Resolved: [this run]($RUN_URL) found the contract current for \`$VERSION\` and the client's suite green."
+    "Resolved: [this run]($RUN_URL) found the contract current for \`$VERSION\` and both clients' suites green."
   echo "Closed issue #$issue" >&2
 }
 
@@ -152,7 +167,7 @@ open_refresh_pr() {
   # -B, not -b: the branch may already exist locally, and a refresh that fails
   # only on its second run is worse than one that never worked.
   git checkout -B "$REFRESH_BRANCH"
-  git add contracts typescript
+  git add contracts typescript python
   git commit -m "chore: refresh the contract to $VERSION
 
 Opened by the daily contract watch. Regenerated from $IMAGE, with the previous
@@ -165,7 +180,7 @@ Refs #$issue"
   open_pr="$(gh pr list --repo "$REPO" --head "$REFRESH_BRANCH" --state open \
     --limit 1 --json number --jq '.[0].number // empty')"
   pr_body="$(cat <<MD
-Refreshes the committed contract to \`$VERSION\`, regenerates both clients, and
+Refreshes the committed contract to \`$VERSION\`, regenerates every client, and
 retires the previous version's artifacts and references.
 
 $(verify_line)
@@ -188,8 +203,8 @@ MD
 }
 
 main() {
-  : "${STATE:?}" "${VERSION:?}" "${IMAGE:?}" "${VERIFY:?}" "${RUN_URL:?}"
-  CHANGED_FILES="$(git status --porcelain -- contracts typescript || true)"
+  : "${STATE:?}" "${VERSION:?}" "${IMAGE:?}" "${VERIFY_TS:?}" "${VERIFY_PY:?}" "${RUN_URL:?}"
+  CHANGED_FILES="$(git status --porcelain -- contracts typescript python || true)"
   export CHANGED_FILES
 
   if [[ "$STATE" == "quiet" ]]; then
