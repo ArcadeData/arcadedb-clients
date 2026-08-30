@@ -38,7 +38,8 @@ make_fixture() {
   mkdir -p "$root/scripts" "$root/contracts" \
            "$root/typescript/packages/client-grpc/src/gen" \
            "$root/typescript/packages/client-grpc/test" \
-           "$root/typescript/packages/client"
+           "$root/typescript/packages/client" \
+           "$root/python/packages/client"
   cp "$SCRIPTS_DIR/resolve-openapi-contract.sh" "$SCRIPTS_DIR/adopt-contract-version.sh" \
      "$SCRIPTS_DIR/fetch-contract.sh" "$root/scripts/"
   mkdir -p "$root/fake-arcadedb/grpc/src/main/proto"
@@ -69,6 +70,24 @@ MD
     > "$root/typescript/packages/client-grpc/package.json"
   printf '{\n  "name": "@arcadedb/client",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
     > "$root/typescript/packages/client/package.json"
+  cat > "$root/python/packages/client/pyproject.toml" <<TOML
+[project]
+name = "arcadedb-client"
+version = "0.1.0"
+
+[tool.arcadedb]
+server-version = "${version}"
+TOML
+  cat > "$root/python/packages/client/README.md" <<MD
+This package was generated from \`contracts/arcadedb-openapi-${version}.json\`.
+
+| Package | Server contract |
+| --- | --- |
+| 0.1.0 | ${version} |
+MD
+  cat > "$root/python/packages/client/src_index.py" <<PY
+# The contract this client is generated from is ${version}, in prose.
+PY
   echo "$root"
 }
 
@@ -202,6 +221,53 @@ check "$after" "$before" "re-adopting the current version changes nothing"
 
 "$FIX/scripts/adopt-contract-version.sh" 99.9.9-NOPE >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses a version whose contracts were never fetched"
+rm -rf "$FIX"
+
+echo "adopt-contract-version.sh - Python"
+
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "0" "adopts a new version with a Python package present"
+
+PYPROJECT="$FIX/python/packages/client/pyproject.toml"
+if grep -q 'server-version = "26.10.1-SNAPSHOT"' "$PYPROJECT"; then
+  ok "rewrites [tool.arcadedb] server-version in pyproject.toml"
+else
+  bad "rewrites [tool.arcadedb] server-version in pyproject.toml (got: $(grep server-version "$PYPROJECT"))"
+fi
+
+PYREADME="$FIX/python/packages/client/README.md"
+case "$(cat "$PYREADME")" in
+  *arcadedb-openapi-26.10.1-SNAPSHOT.json*) ok "repoints the contract filename in a Python README" ;;
+  *) bad "repoints the contract filename in a Python README" ;;
+esac
+
+case "$(cat "$FIX/python/packages/client/src_index.py")" in
+  *26.10.1-SNAPSHOT*) ok "repoints a prose version mention in a .py file" ;;
+  *) bad "repoints a prose version mention in a .py file" ;;
+esac
+
+# The TABLE_ROW guard must cover Python files exactly as it covers TypeScript ones.
+# A compatibility row records that 0.1.0 really WAS generated from 26.9.1-SNAPSHOT;
+# rewriting it falsifies history rather than updating it.
+if grep -q '^| 0.1.0 | 26.9.1-SNAPSHOT |$' "$PYREADME"; then
+  ok "leaves the Python compatibility table row untouched"
+else
+  bad "leaves the Python compatibility table row untouched (the TABLE_ROW guard is not covering Python files)"
+fi
+rm -rf "$FIX"
+
+# A malformed or merge-mangled pyproject must fail loudly rather than leave one of
+# two keys silently stale.
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+printf '[tool.arcadedb]\nserver-version = "26.9.1-SNAPSHOT"\nserver-version = "26.9.1-SNAPSHOT"\n' \
+  > "$FIX/python/packages/client/pyproject.toml"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "1" "refuses a pyproject.toml carrying two server-version keys"
 rm -rf "$FIX"
 
 echo "contract-watch.yml wiring"
