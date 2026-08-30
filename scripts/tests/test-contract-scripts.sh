@@ -313,14 +313,14 @@ echo "report-contract-watch.sh (pure functions, no gh)"
 
 # Sourced, not executed: main() is guarded so these can be exercised offline.
 # shellcheck source=/dev/null
-STATE=contract-changed VERSION=26.10.1-SNAPSHOT IMAGE=img VERIFY=success RUN_URL=x \
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT IMAGE=img VERIFY_TS=success VERIFY_PY=success RUN_URL=x \
   source "$SCRIPTS_DIR/report-contract-watch.sh"
 
 # THE defect this replaced: the body embeds the run URL, which is unique per run,
 # so comparing rendered bodies is never equal and posts a "the finding changed"
 # comment every single day while the code claims to be quiet. The fingerprint
 # must ignore the run and track only the finding.
-STATE=contract-changed VERSION=26.10.1-SNAPSHOT VERIFY=success CHANGED_FILES=" M a"
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT VERIFY_TS=success VERIFY_PY=success CHANGED_FILES=" M a"
 RUN_URL="https://example.invalid/runs/1"; a="$(finding_fingerprint)"
 RUN_URL="https://example.invalid/runs/2"; b="$(finding_fingerprint)"
 check "$a" "$b" "fingerprint ignores the run URL, so an unchanged finding stays unchanged"
@@ -329,9 +329,18 @@ CHANGED_FILES=" M a
  M b"; c="$(finding_fingerprint)"
 if [[ "$c" != "$a" ]]; then ok "fingerprint moves when the affected files move"; else bad "fingerprint moves when the affected files move"; fi
 
-CHANGED_FILES=" M a"; VERIFY=failure; d="$(finding_fingerprint)"
-if [[ "$d" != "$a" ]]; then ok "fingerprint moves when the suite result flips"; else bad "fingerprint moves when the suite result flips"; fi
-VERIFY=success
+# Both verdicts have to feed the fingerprint independently. If either one were
+# dropped, that language recovering while the other stayed red would leave the
+# fingerprint unchanged, and report_finding would silently decline to comment
+# on a finding that genuinely changed - a silent production failure with no
+# other check that would catch it.
+CHANGED_FILES=" M a"; VERIFY_TS=failure; d="$(finding_fingerprint)"
+if [[ "$d" != "$a" ]]; then ok "fingerprint moves when the TypeScript verdict flips alone"; else bad "fingerprint moves when the TypeScript verdict flips alone"; fi
+VERIFY_TS=success
+
+VERIFY_PY=failure; e="$(finding_fingerprint)"
+if [[ "$e" != "$a" ]]; then ok "fingerprint moves when the Python verdict flips alone"; else bad "fingerprint moves when the Python verdict flips alone"; fi
+VERIFY_PY=success
 
 # The round trip that decides whether a comment is posted.
 IMAGE="arcadedata/arcadedb:26.10.1-SNAPSHOT"
