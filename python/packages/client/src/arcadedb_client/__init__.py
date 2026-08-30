@@ -28,6 +28,7 @@ from .facade.data import (
     session_kwarg,
     to_envelope,
 )
+from .facade.transaction import Transaction
 
 __version__ = "0.1.0"
 
@@ -37,6 +38,7 @@ __all__ = [
     "ArcadeDBServer",
     "QueryEnvelope",
     "QueryLanguage",
+    "Transaction",
     "__version__",
     "basic_auth",
     "bearer_auth",
@@ -103,6 +105,10 @@ class ArcadeDBDatabase:
         data = unwrap(response)
         assert isinstance(data, QueryResponse)
         return to_envelope(data)
+
+    def transaction(self) -> Transaction:
+        """Runs a block inside a server-side transaction; see `Transaction`."""
+        return Transaction(self._client, self.name)
 
 
 class ArcadeDBServer:
