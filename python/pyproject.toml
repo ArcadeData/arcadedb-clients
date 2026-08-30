@@ -27,7 +27,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["packages/client/src/arcadedb_client", "packages/client/tests"]
+files = ["packages/client/src/arcadedb_client", "packages/client/tests", "e2e"]
 # scripts/ is not a package (its modules are loaded via sys.path.insert, since a
 # top-level scripts/ can't be a workspace member), so mypy needs the extra search
 # path to resolve `from check_codegen_skips import ...` in the test that imports it.

@@ -83,3 +83,35 @@ jobs:
       - name: Test
         working-directory: python
         run: uv run pytest
+
+  e2e:
+    name: End-to-end against a real server
+    needs: build
+    runs-on: ubuntu-latest
+    # Container pull plus ArcadeDB JVM startup can run well past what the unit job
+    # needs; an explicit cap keeps a hung container from burning the runner's
+    # default multi-hour budget instead of failing fast.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Set up Python
+        working-directory: python
+        # 3.14, not the build job's 3.10: the two jobs together cover the declared
+        # floor and the current release without a matrix.
+        run: uv python install 3.14
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync --frozen --python 3.14
+
+      - name: E2E tests against a real ArcadeDB server
+        working-directory: python
+        run: uv run pytest e2e -v

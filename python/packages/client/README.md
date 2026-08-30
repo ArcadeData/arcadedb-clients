@@ -204,6 +204,11 @@ endpoints, cannot pass unnoticed.
 same generator limitation but is hand-written rather than left unwrapped, because a time-series
 namespace that could query samples but never ingest any would be an odd thing to ship.
 
+`POST /api/v1/server` (administrative commands) is likewise not wrapped by the facade, and reached
+through `.raw` returns a body that does not conform to its declared `QueryResponse` schema
+(`{"result": "ok"}` where an array is declared), so the generated model raises on an otherwise
+successful call.
+
 **Wrapped, but returning `dict[str, Any]` instead of a generated model.** Unlike `batch`,
 `prom/read`, and `prom/write` above, these three routes describe a JSON body the generator *can*
 model, and it does generate operation functions and response models for them -
