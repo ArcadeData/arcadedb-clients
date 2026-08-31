@@ -1,0 +1,136 @@
+name: Publish arcadedb-client (PyPI)
+
+# Manual release only. Nothing in this repository publishes to PyPI on push, tag, or
+# schedule - a human triggers this from the Actions UI (or `gh workflow run
+# publish-python.yml`) after bumping python/packages/client/pyproject.toml's
+# "version". This workflow is the ONLY place that talks to PyPI.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version being published. Must equal packages/client/pyproject.toml "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # PyPI Trusted Publishing (OIDC) needs a token to attest with; this is the minimum
+  # grant that provides one. See the publish step below for the two caveats that
+  # cost real debugging time when publish.yml (the npm sibling of this workflow) was
+  # set up - one of which does NOT apply here, and one of which does.
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout is pinned to the same commit SHA ci-python.yml uses, never a
+      # mutable tag - a tag can be moved after the fact, a SHA cannot.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync --frozen
+
+      - name: Verify the dispatch input matches the package version
+        working-directory: python
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          uv run python - <<'PY'
+          import os, sys, tomllib, pathlib
+          pkg = tomllib.loads(pathlib.Path("packages/client/pyproject.toml").read_text())
+          actual = pkg["project"]["version"]
+          requested = os.environ["REQUESTED_VERSION"]
+          if actual != requested:
+              sys.exit(
+                  f'Dispatch input "{requested}" does not match packages/client/pyproject.toml '
+                  f'version "{actual}". Bump the package version first, or dispatch with the correct version.'
+              )
+          print(f"OK: dispatch input matches pyproject.toml version {actual}")
+          PY
+
+      - name: Run the full unit test suite
+        working-directory: python
+        run: uv run pytest
+
+      - name: Verify the recorded server version matches the committed contract
+        working-directory: python
+        # The package records the ArcadeDB release it was generated against in
+        # pyproject.toml's [tool.arcadedb] server-version. That must still match the
+        # committed contract's info.version at publish time - otherwise the
+        # compatibility table this package ships in its README would be lying the
+        # moment it is published. The contract file's name carries the version, so
+        # it is located by pattern rather than hardcoded, and the check fails loudly
+        # if zero or more than one candidate is found.
+        run: |
+          uv run python - <<'PY'
+          import json, pathlib, sys, tomllib
+          contracts = pathlib.Path("../contracts")
+          candidates = sorted(contracts.glob("arcadedb-openapi-*.json"))
+          if len(candidates) != 1:
+              sys.exit(f"Expected exactly one contracts/arcadedb-openapi-*.json, found {len(candidates)}")
+          pkg = tomllib.loads(pathlib.Path("packages/client/pyproject.toml").read_text())
+          pkg_version = pkg.get("tool", {}).get("arcadedb", {}).get("server-version")
+          contract_version = json.loads(candidates[0].read_text()).get("info", {}).get("version")
+          if not pkg_version or not contract_version:
+              sys.exit(f'Missing version field(s): server-version="{pkg_version}", info.version="{contract_version}"')
+          if pkg_version != contract_version:
+              sys.exit(
+                  f'[tool.arcadedb] server-version ("{pkg_version}") does not match '
+                  f'{candidates[0].name}\'s info.version ("{contract_version}")'
+              )
+          print(f"OK: server-version matches contract info.version ({pkg_version})")
+          PY
+
+      - name: Build the wheel and sdist, and verify their contents
+        working-directory: python
+        # Asserting the built artifacts actually contain the generated tree and the
+        # typing marker turns a silent no-op build into a hard CI failure instead of
+        # an empty published package - the same guard publish.yml applies to dist/.
+        run: |
+          uv build --package arcadedb-client --out-dir dist
+          WHEEL="$(ls dist/arcadedb_client-*.whl)"
+          for entry in \
+            "arcadedb_client/__init__.py" \
+            "arcadedb_client/py.typed" \
+            "arcadedb_client/_generated/client.py" \
+            "arcadedb_client/_generated/api/query/execute_query_post.py"; do
+            unzip -l "$WHEEL" | grep -q "$entry" \
+              || { echo "$entry is missing from $WHEEL - the published package would be broken" >&2; exit 1; }
+          done
+          ls dist/arcadedb_client-*.tar.gz >/dev/null
+
+      # Two caveats recorded here, mirroring the ones publish.yml (npm) records at its
+      # own publish step - one INVERTS, one carries over unchanged:
+      #
+      # 1. This INVERTS npm's bootstrap problem. npm's trusted-publisher configuration
+      #    attaches to an EXISTING package, so the first publish of @arcadedb/client may
+      #    need a short-lived token before a trusted publisher can even be configured.
+      #    PyPI instead supports PENDING publishers: a trusted publisher for this
+      #    project can be configured on PyPI before the project exists there at all.
+      #    So the first publish of arcadedb-client needs no bootstrap token and no
+      #    stored secret, ever - every run, including the first, authenticates purely
+      #    via the id-token permission above.
+      #
+      # 2. This carries over unchanged. PyPI, like npm, does NOT validate a
+      #    trusted-publisher configuration when it is saved - it will accept a
+      #    workflow filename that does not exist, or that does not match this file's
+      #    actual name, with no error at configuration time. A mismatch surfaces only
+      #    later, as a failed publish. So: whenever this file is renamed, or the
+      #    trusted publisher is (re)configured, check the workflow filename entered in
+      #    PyPI's publisher settings against this file's actual name (currently
+      #    `publish-python.yml`) once, deliberately - side by side, not from memory.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: python/dist
+          attestations: true

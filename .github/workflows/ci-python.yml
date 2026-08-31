@@ -1,0 +1,117 @@
+name: Python client CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "python/**"
+      - "contracts/**"
+      - "scripts/**"
+      # The drift gate's untracked-file half is a `git status --porcelain` over the
+      # generated directory, which an ignore rule covering it would silence
+      # permanently and invisibly. ci.yml lists .gitignore for the same reason.
+      - ".gitignore"
+      - ".github/workflows/ci-python.yml"
+  pull_request:
+    paths:
+      - "python/**"
+      - "contracts/**"
+      - "scripts/**"
+      - ".gitignore"
+      - ".github/workflows/ci-python.yml"
+
+jobs:
+  build:
+    name: Lint, typecheck and drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Set up Python
+        working-directory: python
+        # 3.10 is the declared floor. The e2e job below runs 3.14, so the two jobs
+        # together cover floor and current without a matrix.
+        run: uv python install 3.10
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync --frozen --python 3.10
+
+      - name: Lint
+        working-directory: python
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Typecheck
+        working-directory: python
+        run: uv run mypy
+
+      - name: Regenerate and verify no drift
+        working-directory: python
+        run: |
+          ./scripts/generate.sh
+
+          # Catches a MODIFIED generated file (existing path, changed content).
+          git diff --exit-code -- packages/client/src/arcadedb_client/_generated
+
+          # Catches an ADDED or RENAMED generated file: `git diff` above is blind to
+          # untracked paths, so a contract that introduces a new model or operation
+          # module would leave the diff check green while the new file went uncommitted.
+          if [[ -n "$(git status --porcelain -- packages/client/src/arcadedb_client/_generated)" ]]; then
+            echo "Generated output changed (untracked and/or modified files below) - commit the regenerated output:" >&2
+            git status --porcelain -- packages/client/src/arcadedb_client/_generated >&2
+            exit 1
+          fi
+
+      - name: Verify the generator skipped exactly the allowlisted endpoints
+        working-directory: python
+        # The third half of the drift gate, and the one with no TypeScript
+        # counterpart: openapi-python-client drops an endpoint it cannot model,
+        # warns, and exits 0. Neither check above can see an endpoint that was
+        # never generated in the first place.
+        run: uv run python scripts/check_codegen_skips.py
+
+      - name: Test
+        working-directory: python
+        run: uv run pytest
+
+  e2e:
+    name: End-to-end against a real server
+    needs: build
+    runs-on: ubuntu-latest
+    # Container pull plus ArcadeDB JVM startup can run well past what the unit job
+    # needs; an explicit cap keeps a hung container from burning the runner's
+    # default multi-hour budget instead of failing fast.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Set up Python
+        working-directory: python
+        # 3.14, not the build job's 3.10: the two jobs together cover the declared
+        # floor and the current release without a matrix.
+        run: uv python install 3.14
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync --frozen --python 3.14
+
+      - name: E2E tests against a real ArcadeDB server
+        working-directory: python
+        run: uv run pytest e2e -v

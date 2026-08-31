@@ -38,7 +38,8 @@ make_fixture() {
   mkdir -p "$root/scripts" "$root/contracts" \
            "$root/typescript/packages/client-grpc/src/gen" \
            "$root/typescript/packages/client-grpc/test" \
-           "$root/typescript/packages/client"
+           "$root/typescript/packages/client" \
+           "$root/python/packages/client"
   cp "$SCRIPTS_DIR/resolve-openapi-contract.sh" "$SCRIPTS_DIR/adopt-contract-version.sh" \
      "$SCRIPTS_DIR/fetch-contract.sh" "$root/scripts/"
   mkdir -p "$root/fake-arcadedb/grpc/src/main/proto"
@@ -69,6 +70,24 @@ MD
     > "$root/typescript/packages/client-grpc/package.json"
   printf '{\n  "name": "@arcadedb/client",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
     > "$root/typescript/packages/client/package.json"
+  cat > "$root/python/packages/client/pyproject.toml" <<TOML
+[project]
+name = "arcadedb-client"
+version = "0.1.0"
+
+[tool.arcadedb]
+server-version = "${version}"
+TOML
+  cat > "$root/python/packages/client/README.md" <<MD
+This package was generated from \`contracts/arcadedb-openapi-${version}.json\`.
+
+| Package | Server contract |
+| --- | --- |
+| 0.1.0 | ${version} |
+MD
+  cat > "$root/python/packages/client/src_index.py" <<PY
+# The contract this client is generated from is ${version}, in prose.
+PY
   echo "$root"
 }
 
@@ -204,6 +223,64 @@ check "$after" "$before" "re-adopting the current version changes nothing"
 check "$rc" "1" "refuses a version whose contracts were never fetched"
 rm -rf "$FIX"
 
+echo "adopt-contract-version.sh - Python"
+
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "0" "adopts a new version with a Python package present"
+
+PYPROJECT="$FIX/python/packages/client/pyproject.toml"
+if grep -q 'server-version = "26.10.1-SNAPSHOT"' "$PYPROJECT"; then
+  ok "rewrites [tool.arcadedb] server-version in pyproject.toml"
+else
+  bad "rewrites [tool.arcadedb] server-version in pyproject.toml (got: $(grep server-version "$PYPROJECT"))"
+fi
+
+PYREADME="$FIX/python/packages/client/README.md"
+case "$(cat "$PYREADME")" in
+  *arcadedb-openapi-26.10.1-SNAPSHOT.json*) ok "repoints the contract filename in a Python README" ;;
+  *) bad "repoints the contract filename in a Python README" ;;
+esac
+
+case "$(cat "$FIX/python/packages/client/src_index.py")" in
+  *26.10.1-SNAPSHOT*) ok "repoints a prose version mention in a .py file" ;;
+  *) bad "repoints a prose version mention in a .py file" ;;
+esac
+
+# The TABLE_ROW guard must cover Python files exactly as it covers TypeScript ones.
+# A compatibility row records that 0.1.0 really WAS generated from 26.9.1-SNAPSHOT;
+# rewriting it falsifies history rather than updating it.
+if grep -q '^| 0.1.0 | 26.9.1-SNAPSHOT |$' "$PYREADME"; then
+  ok "leaves the Python compatibility table row untouched"
+else
+  bad "leaves the Python compatibility table row untouched (the TABLE_ROW guard is not covering Python files)"
+fi
+rm -rf "$FIX"
+
+# A malformed or merge-mangled pyproject must fail loudly rather than leave one of
+# two keys silently stale.
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+printf '[tool.arcadedb]\nserver-version = "26.9.1-SNAPSHOT"\nserver-version = "26.9.1-SNAPSHOT"\n' \
+  > "$FIX/python/packages/client/pyproject.toml"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "1" "refuses a pyproject.toml carrying two server-version keys"
+rm -rf "$FIX"
+
+# The mirror-image case: a pyproject.toml missing the key entirely (e.g. a
+# single-quoted TOML value, a mangled merge) must fail loudly too, not be
+# silently accepted as "nothing to update".
+FIX="$(make_fixture 26.9.1-SNAPSHOT)"
+echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
+echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
+printf '[tool.arcadedb]\n' > "$FIX/python/packages/client/pyproject.toml"
+"$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
+check "$rc" "1" "refuses a pyproject.toml with no server-version key"
+rm -rf "$FIX"
+
 echo "contract-watch.yml wiring"
 
 # The script gaining a capability and the workflow USING it are two different
@@ -247,14 +324,14 @@ echo "report-contract-watch.sh (pure functions, no gh)"
 
 # Sourced, not executed: main() is guarded so these can be exercised offline.
 # shellcheck source=/dev/null
-STATE=contract-changed VERSION=26.10.1-SNAPSHOT IMAGE=img VERIFY=success RUN_URL=x \
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT IMAGE=img VERIFY_TS=success VERIFY_PY=success RUN_URL=x \
   source "$SCRIPTS_DIR/report-contract-watch.sh"
 
 # THE defect this replaced: the body embeds the run URL, which is unique per run,
 # so comparing rendered bodies is never equal and posts a "the finding changed"
 # comment every single day while the code claims to be quiet. The fingerprint
 # must ignore the run and track only the finding.
-STATE=contract-changed VERSION=26.10.1-SNAPSHOT VERIFY=success CHANGED_FILES=" M a"
+STATE=contract-changed VERSION=26.10.1-SNAPSHOT VERIFY_TS=success VERIFY_PY=success CHANGED_FILES=" M a"
 RUN_URL="https://example.invalid/runs/1"; a="$(finding_fingerprint)"
 RUN_URL="https://example.invalid/runs/2"; b="$(finding_fingerprint)"
 check "$a" "$b" "fingerprint ignores the run URL, so an unchanged finding stays unchanged"
@@ -263,9 +340,18 @@ CHANGED_FILES=" M a
  M b"; c="$(finding_fingerprint)"
 if [[ "$c" != "$a" ]]; then ok "fingerprint moves when the affected files move"; else bad "fingerprint moves when the affected files move"; fi
 
-CHANGED_FILES=" M a"; VERIFY=failure; d="$(finding_fingerprint)"
-if [[ "$d" != "$a" ]]; then ok "fingerprint moves when the suite result flips"; else bad "fingerprint moves when the suite result flips"; fi
-VERIFY=success
+# Both verdicts have to feed the fingerprint independently. If either one were
+# dropped, that language recovering while the other stayed red would leave the
+# fingerprint unchanged, and report_finding would silently decline to comment
+# on a finding that genuinely changed - a silent production failure with no
+# other check that would catch it.
+CHANGED_FILES=" M a"; VERIFY_TS=failure; d="$(finding_fingerprint)"
+if [[ "$d" != "$a" ]]; then ok "fingerprint moves when the TypeScript verdict flips alone"; else bad "fingerprint moves when the TypeScript verdict flips alone"; fi
+VERIFY_TS=success
+
+VERIFY_PY=failure; e="$(finding_fingerprint)"
+if [[ "$e" != "$a" ]]; then ok "fingerprint moves when the Python verdict flips alone"; else bad "fingerprint moves when the Python verdict flips alone"; fi
+VERIFY_PY=success
 
 # The round trip that decides whether a comment is posted.
 IMAGE="arcadedata/arcadedb:26.10.1-SNAPSHOT"

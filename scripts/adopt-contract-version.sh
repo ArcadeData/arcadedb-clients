@@ -96,17 +96,47 @@ import os, pathlib, re, json
 version = os.environ["VERSION"]
 previous = os.environ.get("PREVIOUS_VERSION", "")
 root = pathlib.Path(os.environ["REPO_ROOT"])
-ts = root / "typescript"
 
-skip_dirs = {"node_modules", ".git", "dist", "gen", ".superpowers", "docs"}
+# An explicit table, not filesystem discovery. The "found by search rather than
+# hardcoded" rule above governs FILES WITHIN a language directory - a new source
+# file must not escape repointing by not being on a list. Which top-level
+# directories are language clients is a different question, and a script that
+# silently began rewriting any new sibling of contracts/ would be worse, not
+# better. Adding a language stays a deliberate one-line change here.
+LANGUAGES = {
+    "typescript": {
+        "suffixes": (".ts", ".md"),
+        "skip_dirs": {"node_modules", ".git", "dist", "gen", ".superpowers", "docs"},
+    },
+    "python": {
+        "suffixes": (".py", ".md", ".toml"),
+        "skip_dirs": {
+            "_generated",
+            "__pycache__",
+            ".venv",
+            ".git",
+            "dist",
+            "build",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            "docs",
+        },
+    },
+}
+
 
 def candidates():
-    for path in ts.rglob("*"):
-        if not path.is_file() or path.suffix not in (".ts", ".md"):
+    for language, config in LANGUAGES.items():
+        base = root / language
+        if not base.is_dir():
             continue
-        if any(part in skip_dirs for part in path.relative_to(root).parts):
-            continue
-        yield path
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix not in config["suffixes"]:
+                continue
+            if any(part in config["skip_dirs"] for part in path.relative_to(root).parts):
+                continue
+            yield path
 
 # The generated module's filename, e.g. ./gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js,
 # and the contract filenames as they appear in prose.
@@ -154,13 +184,36 @@ for path in candidates():
 
 # package.json carries serverVersion as real data, so edit it as JSON and keep
 # the file's existing indentation and trailing newline.
-for pkg in sorted(ts.glob("packages/*/package.json")):
+for pkg in sorted((root / "typescript").glob("packages/*/package.json")):
     data = json.loads(pkg.read_text())
     contract = data.get("arcadedb")
     if isinstance(contract, dict) and contract.get("serverVersion") not in (None, version):
         contract["serverVersion"] = version
         pkg.write_text(json.dumps(data, indent=2) + "\n")
         changed.append(pkg.relative_to(root))
+
+# pyproject.toml carries server-version as real data. Python has tomllib for
+# reading and no stdlib writer, so this is a targeted line substitution that
+# asserts it matched exactly once - a malformed, duplicated, or missing key fails
+# loudly rather than silently leaving a stale version behind. Note this means
+# pyproject.toml is processed TWICE: once above by the generic prose pass (it
+# matches the ".toml" suffix, so any bare version mention in a comment gets
+# repointed there), and again here by this dedicated pass over the
+# `server-version` key specifically. That is deliberate, not redundant - the
+# duplicate-detection below counts how many times the KEY appears, not how many
+# times the VALUE (a version string) appears in the file, which the generic pass
+# cannot do. A future reader "simplifying" this by dropping the dedicated pass
+# would lose that guard.
+PYPROJECT_SERVER_VERSION = re.compile(r'^(server-version\s*=\s*")[^"]*(")', re.MULTILINE)
+
+for pyproject in sorted((root / "python").glob("packages/*/pyproject.toml")):
+    original = pyproject.read_text()
+    updated, count = PYPROJECT_SERVER_VERSION.subn(rf"\g<1>{version}\g<2>", original)
+    if count != 1:
+        raise SystemExit(f"{pyproject} has {count} server-version keys; expected exactly one")
+    if updated != original:
+        pyproject.write_text(updated)
+        changed.append(pyproject.relative_to(root))
 
 if changed:
     print("  repointed:", file=__import__("sys").stderr)

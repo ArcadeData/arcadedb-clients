@@ -1,0 +1,64 @@
+[project]
+name = "arcadedb-clients-workspace"
+version = "0.0.0"
+description = "Workspace root for ArcadeDB's Python clients. Not published."
+requires-python = ">=3.10"
+dependencies = ["arcadedb-client"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+arcadedb-client = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+# Generated output is contract-shaped, not style-shaped. Holding it to a
+# hand-written bar produces noise, not safety - the same reason
+# typescript/eslint.config.js excludes src/generated/ and src/gen/.
+extend-exclude = ["packages/*/src/*/_generated"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["packages/client/src/arcadedb_client", "packages/client/tests", "e2e"]
+# scripts/ is not a package (its modules are loaded via sys.path.insert, since a
+# top-level scripts/ can't be a workspace member), so mypy needs the extra search
+# path to resolve `from check_codegen_skips import ...` in the test that imports it.
+mypy_path = ["scripts"]
+# The generated tree is excluded rather than loosened: it is regenerated on
+# every contract bump, so any suppression written into it would be erased.
+exclude = "(^|/)_generated/"
+
+[[tool.mypy.overrides]]
+module = "arcadedb_client._generated.*"
+ignore_errors = true
+# NOT follow_imports = "skip": that would make every name imported from _generated
+# (Response, ErrorResponse, ...) resolve to `Any`, which erases the type parameter
+# hand-written code needs - e.g. `unwrap`'s `Response[T] -> T`. `exclude` above
+# already keeps this tree out of the top-level file list; `ignore_errors` keeps its
+# own (regenerated, unfixable) issues silent. Both are enough on their own -
+# `follow_imports = "skip"` only breaks downstream typing.
+
+[tool.pytest.ini_options]
+# e2e/ is excluded here and has its own invocation, so `pytest` never starts a
+# container - the same split typescript/vitest.config.ts makes.
+testpaths = ["packages/client/tests"]
+asyncio_mode = "strict"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "openapi-python-client>=0.28.4",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.5",
+    "testcontainers>=4.15.0",
+]
