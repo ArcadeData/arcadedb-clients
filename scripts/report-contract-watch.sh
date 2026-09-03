@@ -21,7 +21,7 @@
 set -euo pipefail
 
 : "${TRACKING_LABEL:=contract-drift}" "${REFRESH_BRANCH:=chore/contract-refresh}"
-REPO="${GITHUB_REPOSITORY:-ArcadeData/arcadedb-clients}"
+REPO="${GITHUB_REPOSITORY:-ArcadeData/arcadedb-drivers}"
 
 # Per-language, so the issue and PR bodies name WHICH client broke rather than
 # just asserting that something did - "the suite fails" is not actionable, but

@@ -10,7 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "arcadedb-client",
-    "arcadedb-clients-workspace",
+    "arcadedb-drivers-workspace",
 ]
 
 [[package]]
@@ -63,7 +63,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "arcadedb-clients-workspace"
+name = "arcadedb-drivers-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

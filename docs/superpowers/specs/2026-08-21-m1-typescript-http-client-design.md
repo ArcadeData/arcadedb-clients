@@ -40,7 +40,7 @@ Publishing over OIDC.
 ## 3. Repository layout
 
 ```
-arcadedb-clients/
+arcadedb-drivers/
 ├── contracts/                                   # SHARED, language-agnostic
 │   └── arcadedb-openapi-26.9.1-SNAPSHOT.json
 ├── scripts/
