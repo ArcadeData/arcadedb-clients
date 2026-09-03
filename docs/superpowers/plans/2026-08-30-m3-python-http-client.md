@@ -59,7 +59,7 @@ a code comment so the next reader does not "fix" it.
 
 ```toml
 [project]
-name = "arcadedb-clients-workspace"
+name = "arcadedb-drivers-workspace"
 version = "0.0.0"
 description = "Workspace root for ArcadeDB's Python clients. Not published."
 requires-python = ">=3.10"
@@ -125,9 +125,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ArcadeData/arcadedb-clients/tree/main/python/packages/client#readme"
-Issues = "https://github.com/ArcadeData/arcadedb-clients/issues"
-Repository = "https://github.com/ArcadeData/arcadedb-clients"
+Homepage = "https://github.com/ArcadeData/arcadedb-drivers/tree/main/python/packages/client#readme"
+Issues = "https://github.com/ArcadeData/arcadedb-drivers/issues"
+Repository = "https://github.com/ArcadeData/arcadedb-drivers"
 
 # The ArcadeDB server release this package was generated against. publish-python.yml
 # re-verifies this against the committed contract's info.version before publishing,

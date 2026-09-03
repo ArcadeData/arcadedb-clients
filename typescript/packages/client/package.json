@@ -12,13 +12,13 @@
     "multi-model",
     "http-client"
   ],
-  "homepage": "https://github.com/ArcadeData/arcadedb-clients/tree/main/typescript/packages/client#readme",
+  "homepage": "https://github.com/ArcadeData/arcadedb-drivers/tree/main/typescript/packages/client#readme",
   "bugs": {
-    "url": "https://github.com/ArcadeData/arcadedb-clients/issues"
+    "url": "https://github.com/ArcadeData/arcadedb-drivers/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ArcadeData/arcadedb-clients.git",
+    "url": "git+https://github.com/ArcadeData/arcadedb-drivers.git",
     "directory": "typescript/packages/client"
   },
   "engines": {

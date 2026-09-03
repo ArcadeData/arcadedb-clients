@@ -73,7 +73,7 @@ coverage/
 
 ```json
 {
-  "name": "@arcadedb/clients-root",
+  "name": "@arcadedb/drivers-root",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
