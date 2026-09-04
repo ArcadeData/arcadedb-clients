@@ -172,25 +172,36 @@ jobs:
       # Two caveats recorded here because both cost real debugging time when this workflow was set
       # up, and neither is discoverable by reading npm's docs in the moment:
       #
-      # 1. npm's documentation does not state whether a trusted publisher can be configured for a
-      #    package that does not yet exist on the registry - trusted-publisher configuration
-      #    attaches to an existing package. Practically: the FIRST publish of each package here may
-      #    need a short-lived, granular-scoped npm token (set as the NPM_TOKEN secret below,
-      #    NODE_AUTH_TOKEN in the environment) to create the package at all. Once it exists, add the
-      #    trusted publisher (GitHub Actions OIDC) in npm's package settings, remove the NPM_TOKEN
-      #    secret, and every subsequent run authenticates purely via the id-token above with no
-      #    stored secret in this repository. This is PER PACKAGE, not per workflow: @arcadedb/driver
-      #    having a trusted publisher does nothing for @arcadedb/driver-grpc, whose own first
-      #    publish needs the same bootstrap. A scope-level token covers both.
+      # 1. A trusted publisher can only be configured for a package that ALREADY EXISTS on the
+      #    registry - npm has no equivalent of PyPI's pending publishers, and `npm trust` does not
+      #    change that ("the package you're configuring must already exist"). So the FIRST publish
+      #    of each package here needs a short-lived, granular-scoped npm token (set as the
+      #    NPM_TOKEN secret below, NODE_AUTH_TOKEN in the environment) to create the package at
+      #    all; afterwards the trusted publisher takes over and the secret goes away. Note there is
+      #    no non-expiring token to fall back on: npm removed legacy tokens in November 2025, and
+      #    every granular token must carry an expiry. One day is the minimum, and enough.
+      #
+      #    This bootstrap is PER PACKAGE, not per workflow: @arcadedb/driver having a trusted
+      #    publisher does nothing for @arcadedb/driver-grpc. A scope-level token covers both.
       #
       # 2. npm does NOT validate a trusted-publisher configuration when it is saved - it will accept
       #    a workflow filename that does not exist, or that does not match this file's actual name,
       #    with no error at configuration time. A mismatch surfaces only later, as a failed publish.
-      #    So: whenever this file is renamed, or the trusted publisher is (re)configured, check the
-      #    workflow filename entered in npm's package settings against this file's actual name
-      #    (currently `publish.yml`) once, deliberately - side by side, not from memory. Both
-      #    packages name this same file, which is the whole reason the `package` input exists
-      #    instead of a second workflow.
+      #    Do not check this by eye against npm's web UI; read back what npm actually stored
+      #    (npm >= 11.15.0, and it needs an interactive 2FA login - a token that bypasses 2FA is
+      #    refused):
+      #
+      #      npm trust list @arcadedb/driver
+      #      npm trust list @arcadedb/driver-grpc
+      #
+      #    `file:` must read `publish.yml`, `repository:` must read ArcadeData/arcadedb-drivers,
+      #    and NO environment may be set, because no job here declares one. Re-read it whenever
+      #    this file is renamed or a publisher is reconfigured. Both packages name this same file,
+      #    which is the whole reason the `package` input exists instead of a second workflow - one
+      #    filename to get right rather than two. To (re)create one:
+      #
+      #      npm trust github <package> --file publish.yml \
+      #        --repo ArcadeData/arcadedb-drivers --allow-publish
       - name: Publish to npm with provenance
         working-directory: typescript
         env:
