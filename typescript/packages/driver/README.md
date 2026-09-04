@@ -7,9 +7,9 @@ If your workload is throughput-sensitive server-to-server streaming instead - la
 sets, bulk inserts - see [`@arcadedb/driver-grpc`](../driver-grpc/README.md), which streams
 natively over gRPC rather than paging through repeated HTTP calls.
 
-**This package is not yet published to npm.** The instructions below describe how it will be
-installed and used once a release is made; until then, consume it from this repository (workspace
-link or `npm pack`).
+Published on npm as [`@arcadedb/driver`](https://www.npmjs.com/package/@arcadedb/driver), with a
+provenance attestation: every release is built and published by `publish.yml` from a clean
+checkout of this repository, never from anyone's laptop.
 
 ## Requirements
 
