@@ -4,7 +4,7 @@ A TypeScript/JavaScript HTTP client for [ArcadeDB](https://arcadedb.com), genera
 OpenAPI contract.
 
 If your workload is throughput-sensitive server-to-server streaming instead - large query result
-sets, bulk inserts - see [`@arcadedb/driver-grpc`](../client-grpc/README.md), which streams
+sets, bulk inserts - see [`@arcadedb/driver-grpc`](../driver-grpc/README.md), which streams
 natively over gRPC rather than paging through repeated HTTP calls.
 
 **This package is not yet published to npm.** The instructions below describe how it will be
@@ -159,20 +159,20 @@ absent; it only means "not visible to this caller right now."
 
 ## Contract version and compatibility
 
-This package was generated from `contracts/arcadedb-openapi-26.9.1-SNAPSHOT.json`, recorded in
+This package was generated from `contracts/arcadedb-openapi-26.9.1.json`, recorded in
 `package.json` as `arcadedb.serverVersion`:
 
 ```json
 {
   "arcadedb": {
-    "serverVersion": "26.9.1-SNAPSHOT"
+    "serverVersion": "26.9.1"
   }
 }
 ```
 
 | `@arcadedb/driver` | ArcadeDB server |
 | --- | --- |
-| 0.1.0 | 26.9.1-SNAPSHOT |
+| 0.1.0 | 26.9.1 |
 
 The client speaks ArcadeDB's HTTP API as described by that contract. Pointing it at a server on a
 materially different release may work for the endpoints both versions share, but is not tested or

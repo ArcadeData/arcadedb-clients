@@ -5,19 +5,17 @@ import { basicAuth, bearerAuth, createClient } from "../packages/driver/src/inde
 import type { ArcadeDBServer } from "../packages/driver/src/index.js";
 import { unwrap } from "../packages/driver/src/internal/unwrap.js";
 
-// Image pin: `arcadedata/arcadedb:26.8.1` is correct here even though the OpenAPI contract this
-// client is generated from is newer (26.9.1-SNAPSHOT). The upstream fixes the newer contract
-// carries changed only spec-generator classes (M0) - no request handler changed. The server has
-// always answered 204 on the transaction endpoints and has always used the
-// `arcadedb-session-id` header; the spec was simply wrong about it. `CommandRequest.language` was
-// the same story: the contract now marks it required (upstream fix #6562), and the 26.8.1 SERVER
-// already required it too - the spec previously omitted a field the server always demanded. So a
-// client generated from the newer contract works unmodified against a 26.8.1 server.
+// Image pin: `arcadedata/arcadedb:26.9.1` is the release the committed OpenAPI contract was
+// generated from, so the client under test and the server it runs against are the same version.
 //
-// DO NOT GENERALISE THIS. It holds only because this particular contract bump was a
-// documentation fix. The moment a contract bump reflects a real wire change, this pin must move
-// with it.
-const DEFAULT_ARCADEDB_IMAGE = "arcadedata/arcadedb:26.8.1";
+// That was not true until this pin moved. It sat at 26.8.1 - a release predating M0 - and needed
+// a paragraph arguing why a client generated from a newer contract still worked against an older
+// server: the M0 changes were documentation fixes to spec-generator classes, and the server had
+// always answered 204 with `arcadedb-session-id` and always demanded `CommandRequest.language`
+// (upstream fix #6562). That argument was sound but load-bearing, and it had to be re-made on
+// every bump. Pinning to the contract's own release retires it. Move this pin with the contract
+// and it stays retired.
+const DEFAULT_ARCADEDB_IMAGE = "arcadedata/arcadedb:26.9.1";
 
 // `ARCADEDB_DOCKER_IMAGE` overrides the pin. It exists for the smoke job in ArcadeData/arcadedb,
 // which runs this suite against the image built from the server commit under review rather than

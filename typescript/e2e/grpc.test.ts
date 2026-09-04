@@ -9,12 +9,12 @@ import { unwrap } from "../packages/driver/src/internal/unwrap.js";
 import { bearerAuth, createClient as createGrpcClient, passwordAuth } from "../packages/driver-grpc/src/index.js";
 import type { ArcadeDBGrpcClient, GrpcRecordSchema, GrpcValueSchema, InsertSummarySchema, Interceptor, QueryResultSchema } from "../packages/driver-grpc/src/index.js";
 
-// Image pin: kept independent of `e2e/data-plane.test.ts`'s pin. That file's 26.8.1 pin is
-// justified by a REST-contract-specific fact (a documentation-only OpenAPI bump); nothing here
-// establishes the same fact for the gRPC contract, so this suite pins the same published tag on
-// its own merits (known-good, has the GRPC plugin class available) rather than by inheriting the
-// other suite's reasoning.
-const DEFAULT_ARCADEDB_IMAGE = "arcadedata/arcadedb:26.8.1";
+// Image pin: kept independent of `e2e/data-plane.test.ts`'s pin, even though both currently name
+// the same tag. They agree because each is pinned to the release its own contract came from, not
+// because this suite inherits the other's reasoning. The `.proto` and the OpenAPI spec are
+// separate artifacts published from the same server release; if they ever stop moving together,
+// these two pins move apart, and nothing here should make that awkward.
+const DEFAULT_ARCADEDB_IMAGE = "arcadedata/arcadedb:26.9.1";
 
 // `ARCADEDB_DOCKER_IMAGE` overrides the pin - same variable name `e2e-js` and the HTTP e2e suite
 // already use. The M2 smoke job in ArcadeData/arcadedb sets this to the image built from the
