@@ -6,7 +6,7 @@ import {
   QueryResultSchema,
   StreamQueryRequest_RetrievalMode,
   StreamQueryRequestSchema,
-} from "../src/gen/arcadedb-server-26.9.1-SNAPSHOT_pb.js";
+} from "../src/gen/arcadedb-server-26.9.1_pb.js";
 import { createInsertStream, createStreamQuery } from "../src/stream.js";
 
 type QueryResult = MessageShape<typeof QueryResultSchema>;

@@ -3,12 +3,14 @@
 A TypeScript/JavaScript gRPC client for ArcadeDB's data plane, generated from ArcadeDB's Protobuf
 contract with [Connect-ES](https://connectrpc.com/).
 
-**This package is not yet published to npm.** Publishing waits on the 26.9.1 release and a
-contract refresh, so the first publish isn't permanently pinned to a SNAPSHOT contract. Until
-then, consume it from this repository (workspace link or `npm pack`).
+**This package is not yet published to npm.** It was waiting on the 26.9.1 release and a contract
+refresh, so that the first publish would not be permanently pinned to a SNAPSHOT contract; both
+have now happened. What remains is that `publish.yml` publishes `@arcadedb/driver` only - its
+build gate and its publish step both name that one workspace - so no workflow publishes this
+package yet. Until one does, consume it from this repository (workspace link or `npm pack`).
 
 If you want an HTTP client instead - including from a browser - see
-[`@arcadedb/driver`](../client/README.md).
+[`@arcadedb/driver`](../driver/README.md).
 
 ## Requirements
 
@@ -36,7 +38,7 @@ HTTP/2, built on Netty's `NettyServerBuilder`, with no gRPC-Web handler, no Conn
 no servlet adapter in front of it. A browser cannot speak raw HTTP/2 gRPC framing at all - there
 is no protocol translation layer for it to go through - so no client library, however written,
 can reach this server from a browser. Anyone who needs a browser client uses
-[`@arcadedb/driver`](../client/README.md) over HTTP instead.
+[`@arcadedb/driver`](../driver/README.md) over HTTP instead.
 
 ## Quick start
 
@@ -259,20 +261,20 @@ client surfaces the error its own transport actually gives it.
 
 ## Contract version and compatibility
 
-This package was generated from `contracts/arcadedb-server-26.9.1-SNAPSHOT.proto`, recorded in
+This package was generated from `contracts/arcadedb-server-26.9.1.proto`, recorded in
 `package.json` as `arcadedb.serverVersion`:
 
 ```json
 {
   "arcadedb": {
-    "serverVersion": "26.9.1-SNAPSHOT"
+    "serverVersion": "26.9.1"
   }
 }
 ```
 
 | `@arcadedb/driver-grpc` | ArcadeDB server |
 | --- | --- |
-| 0.1.0 | 26.9.1-SNAPSHOT |
+| 0.1.0 | 26.9.1 |
 
 Pointing it at a server on a materially different release may work for the RPCs both versions
 share, but is not tested or supported.
