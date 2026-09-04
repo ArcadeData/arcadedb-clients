@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // Generated output is excluded globally rather than per-block. Both packages carry a
-    // generated directory (`client/src/generated` from openapi-typescript, `client-grpc/src/gen`
+    // generated directory (`driver/src/generated` from openapi-typescript, `driver-grpc/src/gen`
     // from protoc-gen-es); neither is ever hand-edited, so a finding in one is not actionable -
     // the only fix is to regenerate, and the drift gate already guarantees they match the
     // contract. protoc-gen-es also emits its own `/* eslint-disable */` header, which this
@@ -22,34 +22,34 @@ export default tseslint.config(
     // never surfaces) inside the library's own implementation or in code written against it;
     // `no-floating-promises` needs type information to see that a given expression's type is a
     // Promise, which the plain `recommended` config above does not provide. Scoped to `src/**`
-    // specifically because `packages/client/tsconfig.json` only `include`s "src" - widening
+    // specifically because `packages/driver/tsconfig.json` only `include`s "src" - widening
     // type-aware linting to test/e2e/config files would need a second tsconfig project or
     // `projectService`'s single-file fallback, and test files here deliberately do things
     // (`async () => new Response(...)` mocks with no internal `await`, `as` narrowings on values
     // vitest's runtime already narrowed) that trip type-checked rules for reasons that have
     // nothing to do with a forgotten await.
-    files: ['packages/client/src/**/*.ts'],
+    files: ['packages/driver/src/**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        project: './packages/client/tsconfig.json',
+        project: './packages/driver/tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },
   },
   {
-    // Same rationale as the block above, for `@arcadedb/client-grpc`: `transaction.ts` and
+    // Same rationale as the block above, for `@arcadedb/driver-grpc`: `transaction.ts` and
     // `stream.ts` are almost entirely promise plumbing (begin/commit/rollback sequencing, manual
     // async-iterator draining) - exactly the shape where a forgotten `await` is both easy to write
     // and easy to miss in review. This package shipped with no type-aware lint coverage at all:
-    // `files: ['packages/client/src/**/*.ts']` above never matched anything under
-    // `packages/client-grpc`. `src/gen/**` needs no exclusion here - the global `ignores` at the
+    // `files: ['packages/driver/src/**/*.ts']` above never matched anything under
+    // `packages/driver-grpc`. `src/gen/**` needs no exclusion here - the global `ignores` at the
     // top of this file already covers every generated directory in the workspace.
-    files: ['packages/client-grpc/src/**/*.ts'],
+    files: ['packages/driver-grpc/src/**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        project: './packages/client-grpc/tsconfig.json',
+        project: './packages/driver-grpc/tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },

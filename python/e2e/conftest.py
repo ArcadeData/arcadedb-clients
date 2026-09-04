@@ -90,7 +90,7 @@ def database(base_url: str) -> str:
     generated model, check the status code, and do not "fix" this back onto the
     generated operation without fixing the contract first.
     """
-    from arcadedb_client import ArcadeDBServer, basic_auth
+    from arcadedb_driver import ArcadeDBServer, basic_auth
 
     with ArcadeDBServer(base_url=base_url, auth=basic_auth("root", ROOT_PASSWORD)) as srv:
         response = srv.raw.get_httpx_client().post(

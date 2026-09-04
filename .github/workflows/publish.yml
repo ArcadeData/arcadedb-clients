@@ -1,14 +1,14 @@
-name: Publish @arcadedb/client
+name: Publish @arcadedb/driver
 
 # Manual release only. Nothing in this repository publishes to npm on push, tag, or schedule - a
 # human triggers this from the Actions UI (or `gh workflow run publish.yml`) after bumping
-# typescript/packages/client/package.json's "version". This workflow is the ONLY place that talks
+# typescript/packages/driver/package.json's "version". This workflow is the ONLY place that talks
 # to the npm registry.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version being published. Must equal packages/client/package.json "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
+        description: 'Version being published. Must equal packages/driver/package.json "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
         required: true
         type: string
 
@@ -45,10 +45,10 @@ jobs:
         working-directory: typescript
         run: |
           node -e '
-            const pkg = require("./packages/client/package.json");
+            const pkg = require("./packages/driver/package.json");
             const requested = process.env.REQUESTED_VERSION;
             if (pkg.version !== requested) {
-              console.error(`Dispatch input "${requested}" does not match packages/client/package.json version "${pkg.version}". Bump the package version first, or dispatch with the correct version.`);
+              console.error(`Dispatch input "${requested}" does not match packages/driver/package.json version "${pkg.version}". Bump the package version first, or dispatch with the correct version.`);
               process.exit(1);
             }
             console.log(`OK: dispatch input matches package.json version ${pkg.version}`);
@@ -78,7 +78,7 @@ jobs:
               console.error(`Expected exactly one contracts/arcadedb-openapi-*.json file, found ${candidates.length}: ${candidates.join(", ")}`);
               process.exit(1);
             }
-            const pkg = require("./packages/client/package.json");
+            const pkg = require("./packages/driver/package.json");
             const contract = JSON.parse(fs.readFileSync(path.join(contractsDir, candidates[0]), "utf8"));
             const pkgVersion = pkg.arcadedb && pkg.arcadedb.serverVersion;
             const contractVersion = contract.info && contract.info.version;
@@ -96,13 +96,13 @@ jobs:
       - name: Build the client package and verify dist/ was produced
         working-directory: typescript
         # npm runs "prepack" per-workspace on `npm publish`/`npm pack`, which is what actually puts
-        # dist/ in the tarball - see packages/client/package.json's "prepack" script. Running it
+        # dist/ in the tarball - see packages/driver/package.json's "prepack" script. Running it
         # explicitly here, ahead of the publish step, and asserting its output exists turns a
         # silent no-op build (missing script, build that produces the wrong directory, etc.) into a
         # hard CI failure instead of an empty published package.
         run: |
-          npm run prepack --workspace packages/client
-          for f in packages/client/dist/index.js packages/client/dist/index.d.ts packages/client/dist/generated/schema.js packages/client/dist/generated/schema.d.ts; do
+          npm run prepack --workspace packages/driver
+          for f in packages/driver/dist/index.js packages/driver/dist/index.d.ts packages/driver/dist/generated/schema.js packages/driver/dist/generated/schema.d.ts; do
             test -f "$f" || (echo "$f is missing after the build - the published package would have shipped empty or broken (dist/index.d.ts imports ./generated/schema.js, which must exist alongside it)" && exit 1)
           done
 
@@ -111,7 +111,7 @@ jobs:
       #
       # 1. npm's documentation does not state whether a trusted publisher can be configured for a
       #    package that does not yet exist on the registry - trusted-publisher configuration
-      #    attaches to an existing package. Practically: the FIRST publish of @arcadedb/client may
+      #    attaches to an existing package. Practically: the FIRST publish of @arcadedb/driver may
       #    need a short-lived, granular-scoped npm token (set as the NPM_TOKEN secret below,
       #    NODE_AUTH_TOKEN in the environment) to create the package at all. Once it exists, add the
       #    trusted publisher (GitHub Actions OIDC) in npm's package settings, remove the NPM_TOKEN
@@ -128,4 +128,4 @@ jobs:
         working-directory: typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace packages/client --access public --provenance
+        run: npm publish --workspace packages/driver --access public --provenance

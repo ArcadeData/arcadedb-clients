@@ -1,4 +1,4 @@
 {
   "files": [],
-  "references": [{ "path": "packages/client" }, { "path": "packages/client-grpc" }]
+  "references": [{ "path": "packages/driver" }, { "path": "packages/driver-grpc" }]
 }

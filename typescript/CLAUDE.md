@@ -17,7 +17,7 @@ npm run lint               # eslint
 npm test                   # vitest run — unit tests only, offline, no Docker
 npm run e2e                # vitest against a real ArcadeDB container (Docker required, Node >= 22.22)
 
-npx vitest run packages/client/test/data.test.ts          # a single test file
+npx vitest run packages/driver/test/data.test.ts          # a single test file
 npx vitest run -t "rolls back"                            # a single test by name
 npx vitest run --config e2e/vitest.config.ts e2e/grpc.test.ts   # a single e2e file
 ```
@@ -36,9 +36,9 @@ no separate `build` script.
 ## Generation
 
 - `generate:http` — `openapi-typescript` over the path printed by
-  `../scripts/resolve-openapi-contract.sh` → `packages/client/src/generated/schema.ts`.
+  `../scripts/resolve-openapi-contract.sh` → `packages/driver/src/generated/schema.ts`.
 - `generate:grpc` — `buf generate --template buf.gen.yaml ..` (the module is the **root**
-  `buf.yaml`) → `packages/client-grpc/src/gen/arcadedb-server-<version>_pb.ts`.
+  `buf.yaml`) → `packages/driver-grpc/src/gen/arcadedb-server-<version>_pb.ts`.
 
 The gRPC output filename embeds the contract version, so a contract bump creates a *new* file
 beside the old one rather than modifying it. `src/index.ts` imports that version-stamped path
@@ -48,7 +48,7 @@ from eslint and both are checked by CI's drift gate.
 
 ## Two packages, deliberately different
 
-`packages/client` (`@arcadedb/client`, HTTP) and `packages/client-grpc` (`@arcadedb/client-grpc`,
+`packages/driver` (`@arcadedb/driver`, HTTP) and `packages/driver-grpc` (`@arcadedb/driver-grpc`,
 gRPC) share one toolchain and one CI job but are independent npm packages. Both are ESM-only,
 Node >= 20, and record the server release they were generated against in
 `package.json`'s `arcadedb.serverVersion`.

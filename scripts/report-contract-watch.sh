@@ -34,8 +34,8 @@ verify_line() {
   fi
   echo "**One or more clients FAIL against \`${IMAGE:-}\`.** See the run for which stage."
   echo
-  [[ "$ts" == "success" ]] && echo "- \`@arcadedb/client\` (TypeScript): passing" || echo "- \`@arcadedb/client\` (TypeScript): **failing**"
-  [[ "$py" == "success" ]] && echo "- \`arcadedb-client\` (Python): passing" || echo "- \`arcadedb-client\` (Python): **failing**"
+  [[ "$ts" == "success" ]] && echo "- \`@arcadedb/driver\` (TypeScript): passing" || echo "- \`@arcadedb/driver\` (TypeScript): **failing**"
+  [[ "$py" == "success" ]] && echo "- \`arcadedb-driver\` (Python): passing" || echo "- \`arcadedb-driver\` (Python): **failing**"
 }
 
 # Everything that makes this finding what it is, and nothing that merely makes

@@ -36,26 +36,26 @@ make_fixture() {
   local root
   root="$(mktemp -d)"
   mkdir -p "$root/scripts" "$root/contracts" \
-           "$root/typescript/packages/client-grpc/src/gen" \
-           "$root/typescript/packages/client-grpc/test" \
-           "$root/typescript/packages/client" \
-           "$root/python/packages/client"
+           "$root/typescript/packages/driver-grpc/src/gen" \
+           "$root/typescript/packages/driver-grpc/test" \
+           "$root/typescript/packages/driver" \
+           "$root/python/packages/driver"
   cp "$SCRIPTS_DIR/resolve-openapi-contract.sh" "$SCRIPTS_DIR/adopt-contract-version.sh" \
      "$SCRIPTS_DIR/fetch-contract.sh" "$root/scripts/"
   mkdir -p "$root/fake-arcadedb/grpc/src/main/proto"
   echo 'syntax = "proto3";' > "$root/fake-arcadedb/grpc/src/main/proto/arcadedb-server.proto"
   echo '{}' > "$root/contracts/arcadedb-openapi-${version}.json"
   echo 'syntax = "proto3";' > "$root/contracts/arcadedb-server-${version}.proto"
-  echo '// generated' > "$root/typescript/packages/client-grpc/src/gen/arcadedb-server-${version}_pb.ts"
-  cat > "$root/typescript/packages/client-grpc/src/index.ts" <<TS
+  echo '// generated' > "$root/typescript/packages/driver-grpc/src/gen/arcadedb-server-${version}_pb.ts"
+  cat > "$root/typescript/packages/driver-grpc/src/index.ts" <<TS
 import { ArcadeDbService } from "./gen/arcadedb-server-${version}_pb.js";
 export * from "./gen/arcadedb-server-${version}_pb.js";
 TS
-  cat > "$root/typescript/packages/client-grpc/test/stream.test.ts" <<TS
+  cat > "$root/typescript/packages/driver-grpc/test/stream.test.ts" <<TS
 import { GrpcRecordSchema } from "../src/gen/arcadedb-server-${version}_pb.js";
 // The contract this client is generated from is ${version}, in prose.
 TS
-  cat > "$root/typescript/packages/client-grpc/README.md" <<MD
+  cat > "$root/typescript/packages/driver-grpc/README.md" <<MD
 This package was generated from \`contracts/arcadedb-server-${version}.proto\`.
 
 Generate your own against \`contracts/arcadedb-server-<version>.proto\` if you prefer.
@@ -66,26 +66,26 @@ Generate your own against \`contracts/arcadedb-server-<version>.proto\` if you p
 | --- | --- |
 | 0.1.0 | ${version} |
 MD
-  printf '{\n  "name": "@arcadedb/client-grpc",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
-    > "$root/typescript/packages/client-grpc/package.json"
-  printf '{\n  "name": "@arcadedb/client",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
-    > "$root/typescript/packages/client/package.json"
-  cat > "$root/python/packages/client/pyproject.toml" <<TOML
+  printf '{\n  "name": "@arcadedb/driver-grpc",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
+    > "$root/typescript/packages/driver-grpc/package.json"
+  printf '{\n  "name": "@arcadedb/driver",\n  "arcadedb": {\n    "serverVersion": "%s"\n  }\n}\n' "$version" \
+    > "$root/typescript/packages/driver/package.json"
+  cat > "$root/python/packages/driver/pyproject.toml" <<TOML
 [project]
-name = "arcadedb-client"
+name = "arcadedb-driver"
 version = "0.1.0"
 
 [tool.arcadedb]
 server-version = "${version}"
 TOML
-  cat > "$root/python/packages/client/README.md" <<MD
+  cat > "$root/python/packages/driver/README.md" <<MD
 This package was generated from \`contracts/arcadedb-openapi-${version}.json\`.
 
 | Package | Server contract |
 | --- | --- |
 | 0.1.0 | ${version} |
 MD
-  cat > "$root/python/packages/client/src_index.py" <<PY
+  cat > "$root/python/packages/driver/src_index.py" <<PY
 # The contract this client is generated from is ${version}, in prose.
 PY
   echo "$root"
@@ -152,29 +152,29 @@ check "$rc" "0" "adopts a new version"
 
 check "$(find "$FIX/contracts" -maxdepth 1 -name 'arcadedb-openapi-*.json' | wc -l | tr -d '[:space:]')" "1" "retires the superseded OpenAPI contract"
 check "$(find "$FIX/contracts" -maxdepth 1 -name 'arcadedb-server-*.proto' | wc -l | tr -d '[:space:]')" "1" "retires the superseded proto"
-check "$(find "$FIX/typescript/packages/client-grpc/src/gen" -maxdepth 1 -name '*_pb.ts' | wc -l | tr -d '[:space:]')" "0" "retires the orphaned generated module"
+check "$(find "$FIX/typescript/packages/driver-grpc/src/gen" -maxdepth 1 -name '*_pb.ts' | wc -l | tr -d '[:space:]')" "0" "retires the orphaned generated module"
 
-src="$FIX/typescript/packages/client-grpc/src/index.ts"
+src="$FIX/typescript/packages/driver-grpc/src/index.ts"
 if [[ -f "$src" ]] && ! grep -q "26.9.1-SNAPSHOT" "$src" && grep -q "arcadedb-server-26.10.1-SNAPSHOT_pb.js" "$src"; then
   ok "repoints src imports at the new generated module"
 else
   bad "repoints src imports at the new generated module"
 fi
 
-tst="$FIX/typescript/packages/client-grpc/test/stream.test.ts"
+tst="$FIX/typescript/packages/driver-grpc/test/stream.test.ts"
 if [[ -f "$tst" ]] && grep -q "arcadedb-server-26.10.1-SNAPSHOT_pb.js" "$tst"; then
   ok "repoints test imports too (tests import the generated module as well)"
 else
   bad "repoints test imports too"
 fi
 
-for pkg in client client-grpc; do
+for pkg in driver driver-grpc; do
   f="$FIX/typescript/packages/$pkg/package.json"
   got="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['arcadedb']['serverVersion'])" "$f" 2>/dev/null)"
   check "${got:-<unreadable>}" "26.10.1-SNAPSHOT" "records the new serverVersion in $pkg/package.json"
 done
 
-readme="$FIX/typescript/packages/client-grpc/README.md"
+readme="$FIX/typescript/packages/driver-grpc/README.md"
 # shellcheck disable=SC2016  # the backticks are literal markdown, not a subshell
 if [[ -f "$readme" ]] && grep -q 'generated from `contracts/arcadedb-server-26.10.1-SNAPSHOT.proto`' "$readme"; then
   ok "updates the README's 'generated from' line"
@@ -231,20 +231,20 @@ echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.pro
 "$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
 check "$rc" "0" "adopts a new version with a Python package present"
 
-PYPROJECT="$FIX/python/packages/client/pyproject.toml"
+PYPROJECT="$FIX/python/packages/driver/pyproject.toml"
 if grep -q 'server-version = "26.10.1-SNAPSHOT"' "$PYPROJECT"; then
   ok "rewrites [tool.arcadedb] server-version in pyproject.toml"
 else
   bad "rewrites [tool.arcadedb] server-version in pyproject.toml (got: $(grep server-version "$PYPROJECT"))"
 fi
 
-PYREADME="$FIX/python/packages/client/README.md"
+PYREADME="$FIX/python/packages/driver/README.md"
 case "$(cat "$PYREADME")" in
   *arcadedb-openapi-26.10.1-SNAPSHOT.json*) ok "repoints the contract filename in a Python README" ;;
   *) bad "repoints the contract filename in a Python README" ;;
 esac
 
-case "$(cat "$FIX/python/packages/client/src_index.py")" in
+case "$(cat "$FIX/python/packages/driver/src_index.py")" in
   *26.10.1-SNAPSHOT*) ok "repoints a prose version mention in a .py file" ;;
   *) bad "repoints a prose version mention in a .py file" ;;
 esac
@@ -265,7 +265,7 @@ FIX="$(make_fixture 26.9.1-SNAPSHOT)"
 echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
 echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
 printf '[tool.arcadedb]\nserver-version = "26.9.1-SNAPSHOT"\nserver-version = "26.9.1-SNAPSHOT"\n' \
-  > "$FIX/python/packages/client/pyproject.toml"
+  > "$FIX/python/packages/driver/pyproject.toml"
 "$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses a pyproject.toml carrying two server-version keys"
 rm -rf "$FIX"
@@ -276,7 +276,7 @@ rm -rf "$FIX"
 FIX="$(make_fixture 26.9.1-SNAPSHOT)"
 echo '{}' > "$FIX/contracts/arcadedb-openapi-26.10.1-SNAPSHOT.json"
 echo 'syntax = "proto3";' > "$FIX/contracts/arcadedb-server-26.10.1-SNAPSHOT.proto"
-printf '[tool.arcadedb]\n' > "$FIX/python/packages/client/pyproject.toml"
+printf '[tool.arcadedb]\n' > "$FIX/python/packages/driver/pyproject.toml"
 "$FIX/scripts/adopt-contract-version.sh" 26.10.1-SNAPSHOT >/dev/null 2>&1; rc=$?
 check "$rc" "1" "refuses a pyproject.toml with no server-version key"
 rm -rf "$FIX"

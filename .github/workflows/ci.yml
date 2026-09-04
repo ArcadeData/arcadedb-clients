@@ -65,16 +65,16 @@ jobs:
           npm run generate
 
           # Catches a MODIFIED generated file (existing path, changed content).
-          git diff --exit-code -- packages/client/src/generated packages/client-grpc/src/gen
+          git diff --exit-code -- packages/driver/src/generated packages/driver-grpc/src/gen
 
           # Catches a RENAMED generated file: `git diff` above is blind to untracked paths, and
           # the gRPC generated filename embeds the contract version
           # (arcadedb-server-<version>_pb.ts), so a contract refresh emits a NEW file beside the
           # old one rather than modifying it in place - the diff check alone would stay green
           # while src/index.ts kept importing the stale, now-orphaned file.
-          if [[ -n "$(git status --porcelain -- packages/client/src/generated packages/client-grpc/src/gen)" ]]; then
+          if [[ -n "$(git status --porcelain -- packages/driver/src/generated packages/driver-grpc/src/gen)" ]]; then
             echo "Generated output changed (untracked and/or modified files below) - commit the regenerated output:" >&2
-            git status --porcelain -- packages/client/src/generated packages/client-grpc/src/gen >&2
+            git status --porcelain -- packages/driver/src/generated packages/driver-grpc/src/gen >&2
             exit 1
           fi
 
@@ -103,7 +103,7 @@ jobs:
 
       - name: Tree-shaking check
         working-directory: typescript
-        run: npx vitest run packages/client/test/treeshake.test.ts
+        run: npx vitest run packages/driver/test/treeshake.test.ts
 
   e2e:
     name: End-to-end against a real server

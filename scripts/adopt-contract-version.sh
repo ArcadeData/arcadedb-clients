@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONTRACTS_DIR="$REPO_ROOT/contracts"
 TS_DIR="$REPO_ROOT/typescript"
-GEN_DIR="$TS_DIR/packages/client-grpc/src/gen"
+GEN_DIR="$TS_DIR/packages/driver-grpc/src/gen"
 
 if [[ $# -ne 1 || -z "${1:-}" ]]; then
   echo "Usage: $0 <version>            e.g. $0 26.10.1-SNAPSHOT" >&2
@@ -80,7 +80,7 @@ try:
     print(json.load(open(sys.argv[1]))['arcadedb']['serverVersion'])
 except Exception:
     print('')
-" "$TS_DIR/packages/client-grpc/package.json")"
+" "$TS_DIR/packages/driver-grpc/package.json")"
 
 echo "Adopting contract version $VERSION (was: ${PREVIOUS_VERSION:-unknown})" >&2
 retire "$OPENAPI" 'arcadedb-openapi-*.json' "$CONTRACTS_DIR"
