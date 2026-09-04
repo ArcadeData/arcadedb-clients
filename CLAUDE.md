@@ -70,7 +70,17 @@ describes the contract itself and a future Python or Go client reads the same mo
   **both** clients, not just the TypeScript one.
 - `publish.yml` — the only thing that talks to npm, and it is **manual workflow_dispatch only**.
   Nothing publishes on push, tag, or schedule. It re-verifies that the dispatch input, the
-  package version, and the contract's `info.version` all agree before publishing.
+  package version, and the contract's `info.version` all agree before publishing. It publishes
+  **one package per dispatch**, chosen by a `package` input (`driver` or `driver-grpc`), and is
+  parameterised rather than duplicated into a sibling workflow for a specific reason: npm keys a
+  trusted publisher on the workflow **filename**, so both packages naming this one file means one
+  thing to configure and cross-check instead of two. Each package still needs its *own* trusted
+  publisher, and its own bootstrap token for its first publish. The dist assertions differ per
+  package — `driver-grpc`'s generated module carries the contract version in its filename, so the
+  expected name is derived from `arcadedb.serverVersion` rather than hardcoded, and the step also
+  asserts that exactly one such module exists (`tsc --build` never removes output whose source is
+  gone, and `files: ["dist"]` would ship a retired one from a tree built across two contract
+  versions).
 - `publish-python.yml` — the npm workflow's sibling, and the only thing that talks to PyPI; also
   **manual workflow_dispatch only**, with the same dispatch-input/version/contract re-verification.
   Its bootstrap story inverts npm's: PyPI supports pending publishers, so the trusted publisher for

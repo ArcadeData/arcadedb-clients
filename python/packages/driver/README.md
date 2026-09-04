@@ -4,9 +4,9 @@ A Python HTTP client for [ArcadeDB](https://arcadedb.com), generated from Arcade
 contract, with a hand-written facade on top for the data plane, transactions, and the pieces of
 the contract the generator cannot model.
 
-**This package is not yet published to PyPI.** The instructions below describe how it will be
-installed and used once a release is made; until then, consume it from this repository (workspace
-install, or `uv build` a wheel yourself).
+Published on PyPI as [`arcadedb-driver`](https://pypi.org/project/arcadedb-driver/), with
+attestations: every release is built and published by `publish-python.yml` from a clean checkout of
+this repository through PyPI's trusted publishing, with no long-lived token anywhere in the chain.
 
 ## Requirements
 

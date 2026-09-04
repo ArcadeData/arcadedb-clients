@@ -1,14 +1,26 @@
-name: Publish @arcadedb/driver
+name: Publish to npm
 
 # Manual release only. Nothing in this repository publishes to npm on push, tag, or schedule - a
-# human triggers this from the Actions UI (or `gh workflow run publish.yml`) after bumping
-# typescript/packages/driver/package.json's "version". This workflow is the ONLY place that talks
-# to the npm registry.
+# human triggers this from the Actions UI (or `gh workflow run publish.yml`) after bumping the
+# chosen package's "version". This workflow is the ONLY place that talks to the npm registry.
+#
+# It publishes ONE package per dispatch, chosen by the `package` input. That input is why this
+# file is parameterised rather than duplicated into a sibling workflow: npm keys a trusted
+# publisher on (org, repo, workflow FILENAME, environment), so every package published from here
+# names this one filename in its own npm settings. A second workflow file would mean a second
+# filename to configure and cross-check by hand - and per caveat 2 below, npm validates neither.
 on:
   workflow_dispatch:
     inputs:
+      package:
+        description: "Which package to publish. Each dispatch publishes exactly one."
+        required: true
+        type: choice
+        options:
+          - driver
+          - driver-grpc
       version:
-        description: 'Version being published. Must equal packages/driver/package.json "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
+        description: 'Version being published. Must equal the chosen packages/<package>/package.json "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
         required: true
         type: string
 
@@ -21,8 +33,14 @@ permissions:
 
 jobs:
   publish:
-    name: Publish to npm
+    name: Publish @arcadedb/${{ inputs.package }} to npm
     runs-on: ubuntu-latest
+    # Every step below addresses the chosen package through these two, never through a literal
+    # workspace name - that is what keeps the two packages from drifting apart in what gets
+    # verified before a publish.
+    env:
+      PKG: ${{ inputs.package }}
+      PKG_DIR: packages/${{ inputs.package }}
     steps:
       # actions/checkout is pinned to the same commit SHA ci.yml uses, never a mutable tag - a tag
       # can be moved after the fact, a SHA cannot.
@@ -45,13 +63,14 @@ jobs:
         working-directory: typescript
         run: |
           node -e '
-            const pkg = require("./packages/driver/package.json");
+            const dir = process.env.PKG_DIR;
+            const pkg = require(`./${dir}/package.json`);
             const requested = process.env.REQUESTED_VERSION;
             if (pkg.version !== requested) {
-              console.error(`Dispatch input "${requested}" does not match packages/driver/package.json version "${pkg.version}". Bump the package version first, or dispatch with the correct version.`);
+              console.error(`Dispatch input "${requested}" does not match ${dir}/package.json version "${pkg.version}". Bump the package version first, or dispatch with the correct version.`);
               process.exit(1);
             }
-            console.log(`OK: dispatch input matches package.json version ${pkg.version}`);
+            console.log(`OK: dispatch input matches ${pkg.name}@${pkg.version}`);
           '
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
@@ -78,16 +97,17 @@ jobs:
               console.error(`Expected exactly one contracts/arcadedb-openapi-*.json file, found ${candidates.length}: ${candidates.join(", ")}`);
               process.exit(1);
             }
-            const pkg = require("./packages/driver/package.json");
+            const dir = process.env.PKG_DIR;
+            const pkg = require(`./${dir}/package.json`);
             const contract = JSON.parse(fs.readFileSync(path.join(contractsDir, candidates[0]), "utf8"));
             const pkgVersion = pkg.arcadedb && pkg.arcadedb.serverVersion;
             const contractVersion = contract.info && contract.info.version;
             if (!pkgVersion || !contractVersion) {
-              console.error(`Missing version field(s): package.json arcadedb.serverVersion="${pkgVersion}", contract info.version="${contractVersion}"`);
+              console.error(`Missing version field(s): ${dir}/package.json arcadedb.serverVersion="${pkgVersion}", contract info.version="${contractVersion}"`);
               process.exit(1);
             }
             if (pkgVersion !== contractVersion) {
-              console.error(`package.json arcadedb.serverVersion ("${pkgVersion}") does not match ${candidates[0]}'"'"'s info.version ("${contractVersion}")`);
+              console.error(`${dir}/package.json arcadedb.serverVersion ("${pkgVersion}") does not match ${candidates[0]}'"'"'s info.version ("${contractVersion}")`);
               process.exit(1);
             }
             console.log(`OK: arcadedb.serverVersion matches contract info.version (${pkgVersion})`);
@@ -96,36 +116,83 @@ jobs:
       - name: Build the client package and verify dist/ was produced
         working-directory: typescript
         # npm runs "prepack" per-workspace on `npm publish`/`npm pack`, which is what actually puts
-        # dist/ in the tarball - see packages/driver/package.json's "prepack" script. Running it
-        # explicitly here, ahead of the publish step, and asserting its output exists turns a
-        # silent no-op build (missing script, build that produces the wrong directory, etc.) into a
-        # hard CI failure instead of an empty published package.
+        # dist/ in the tarball - see each package's "prepack" script. Running it explicitly here,
+        # ahead of the publish step, and asserting its output exists turns a silent no-op build
+        # (missing script, build that produces the wrong directory, etc.) into a hard CI failure
+        # instead of an empty published package.
+        #
+        # The two packages need DIFFERENT assertions, which is why this is a script and not one
+        # shared list. `driver` emits its generated schema at a fixed path. `driver-grpc` emits a
+        # module whose filename carries the contract version, so the expected name is derived from
+        # the package's own arcadedb.serverVersion - already proved equal to the committed
+        # contract by the step above - rather than hardcoded, where it would rot on every bump.
         run: |
-          npm run prepack --workspace packages/driver
-          for f in packages/driver/dist/index.js packages/driver/dist/index.d.ts packages/driver/dist/generated/schema.js packages/driver/dist/generated/schema.d.ts; do
-            test -f "$f" || (echo "$f is missing after the build - the published package would have shipped empty or broken (dist/index.d.ts imports ./generated/schema.js, which must exist alongside it)" && exit 1)
-          done
+          npm run prepack --workspace "$PKG_DIR"
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+            const dir = process.env.PKG_DIR;
+            const pkg = require(`./${dir}/package.json`);
+            const required = ["dist/index.js", "dist/index.d.ts"];
+
+            if (process.env.PKG === "driver-grpc") {
+              const v = pkg.arcadedb.serverVersion;
+              required.push(`dist/gen/arcadedb-server-${v}_pb.js`, `dist/gen/arcadedb-server-${v}_pb.d.ts`);
+            } else {
+              required.push("dist/generated/schema.js", "dist/generated/schema.d.ts");
+            }
+
+            const missing = required.filter((f) => !fs.existsSync(path.join(dir, f)));
+            if (missing.length) {
+              console.error(`Missing after the build, so the published package would have shipped empty or broken:`);
+              for (const f of missing) console.error(`  ${dir}/${f}`);
+              console.error(`dist/index.d.ts imports its generated module by name; that module must exist alongside it.`);
+              process.exit(1);
+            }
+
+            // Only driver-grpc can accumulate here. `tsc --build` emits into dist/ and never
+            // removes output whose source is gone, and "files": ["dist"] ships the whole
+            // directory - so a tree that has been built across two contract versions carries a
+            // retired *_pb.js that would go out in the tarball. A clean CI checkout cannot hit
+            // that, which is exactly why publishing happens here and not from a laptop; this
+            // assertion is what makes the guarantee explicit rather than incidental.
+            if (process.env.PKG === "driver-grpc") {
+              const genDir = path.join(dir, "dist/gen");
+              const modules = fs.readdirSync(genDir).filter((f) => f.endsWith("_pb.js"));
+              if (modules.length !== 1) {
+                console.error(`Expected exactly one generated module in ${genDir}, found ${modules.length}: ${modules.join(", ")}`);
+                console.error(`A stale module from a previous contract version would be published inside the tarball.`);
+                process.exit(1);
+              }
+            }
+
+            console.log(`OK: ${pkg.name}@${pkg.version} built with all expected dist/ output`);
+          '
 
       # Two caveats recorded here because both cost real debugging time when this workflow was set
       # up, and neither is discoverable by reading npm's docs in the moment:
       #
       # 1. npm's documentation does not state whether a trusted publisher can be configured for a
       #    package that does not yet exist on the registry - trusted-publisher configuration
-      #    attaches to an existing package. Practically: the FIRST publish of @arcadedb/driver may
+      #    attaches to an existing package. Practically: the FIRST publish of each package here may
       #    need a short-lived, granular-scoped npm token (set as the NPM_TOKEN secret below,
       #    NODE_AUTH_TOKEN in the environment) to create the package at all. Once it exists, add the
       #    trusted publisher (GitHub Actions OIDC) in npm's package settings, remove the NPM_TOKEN
       #    secret, and every subsequent run authenticates purely via the id-token above with no
-      #    stored secret in this repository.
+      #    stored secret in this repository. This is PER PACKAGE, not per workflow: @arcadedb/driver
+      #    having a trusted publisher does nothing for @arcadedb/driver-grpc, whose own first
+      #    publish needs the same bootstrap. A scope-level token covers both.
       #
       # 2. npm does NOT validate a trusted-publisher configuration when it is saved - it will accept
       #    a workflow filename that does not exist, or that does not match this file's actual name,
       #    with no error at configuration time. A mismatch surfaces only later, as a failed publish.
       #    So: whenever this file is renamed, or the trusted publisher is (re)configured, check the
       #    workflow filename entered in npm's package settings against this file's actual name
-      #    (currently `publish.yml`) once, deliberately - side by side, not from memory.
+      #    (currently `publish.yml`) once, deliberately - side by side, not from memory. Both
+      #    packages name this same file, which is the whole reason the `package` input exists
+      #    instead of a second workflow.
       - name: Publish to npm with provenance
         working-directory: typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --workspace packages/driver --access public --provenance
+        run: npm publish --workspace "$PKG_DIR" --access public --provenance
