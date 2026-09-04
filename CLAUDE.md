@@ -75,7 +75,10 @@ describes the contract itself and a future Python or Go client reads the same mo
   parameterised rather than duplicated into a sibling workflow for a specific reason: npm keys a
   trusted publisher on the workflow **filename**, so both packages naming this one file means one
   thing to configure and cross-check instead of two. Each package still needs its *own* trusted
-  publisher, and its own bootstrap token for its first publish. The dist assertions differ per
+  publisher, and its own bootstrap token for its first publish — npm has no equivalent of PyPI's
+  pending publishers, so a package must exist before it can be trusted. Verify a publisher by
+  reading back what npm stored (`npm trust list <package>`), never by eye against the web UI; npm
+  validates that configuration at neither save nor dispatch time. The dist assertions differ per
   package — `driver-grpc`'s generated module carries the contract version in its filename, so the
   expected name is derived from `arcadedb.serverVersion` rather than hardcoded, and the step also
   asserts that exactly one such module exists (`tsc --build` never removes output whose source is
