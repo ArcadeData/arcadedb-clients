@@ -6,7 +6,7 @@
 version: v2
 plugins:
   - local: protoc-gen-es
-    out: packages/client-grpc/src/gen
+    out: packages/driver-grpc/src/gen
     opt:
       - target=ts
       # This repository is ESM-only and relative imports need an explicit

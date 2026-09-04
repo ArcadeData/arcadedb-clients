@@ -1,4 +1,4 @@
-name: Python client CI
+name: Python driver CI
 
 on:
   push:
@@ -61,14 +61,14 @@ jobs:
           ./scripts/generate.sh
 
           # Catches a MODIFIED generated file (existing path, changed content).
-          git diff --exit-code -- packages/client/src/arcadedb_client/_generated
+          git diff --exit-code -- packages/driver/src/arcadedb_driver/_generated
 
           # Catches an ADDED or RENAMED generated file: `git diff` above is blind to
           # untracked paths, so a contract that introduces a new model or operation
           # module would leave the diff check green while the new file went uncommitted.
-          if [[ -n "$(git status --porcelain -- packages/client/src/arcadedb_client/_generated)" ]]; then
+          if [[ -n "$(git status --porcelain -- packages/driver/src/arcadedb_driver/_generated)" ]]; then
             echo "Generated output changed (untracked and/or modified files below) - commit the regenerated output:" >&2
-            git status --porcelain -- packages/client/src/arcadedb_client/_generated >&2
+            git status --porcelain -- packages/driver/src/arcadedb_driver/_generated >&2
             exit 1
           fi
 

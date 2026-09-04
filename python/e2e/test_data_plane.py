@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from arcadedb_client import ArcadeDBError, ArcadeDBServer, AsyncArcadeDBServer, basic_auth
+from arcadedb_driver import ArcadeDBError, ArcadeDBServer, AsyncArcadeDBServer, basic_auth
 
 from .conftest import ROOT_PASSWORD
 

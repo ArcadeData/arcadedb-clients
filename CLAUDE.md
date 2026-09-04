@@ -74,7 +74,7 @@ describes the contract itself and a future Python or Go client reads the same mo
 - `publish-python.yml` — the npm workflow's sibling, and the only thing that talks to PyPI; also
   **manual workflow_dispatch only**, with the same dispatch-input/version/contract re-verification.
   Its bootstrap story inverts npm's: PyPI supports pending publishers, so the trusted publisher for
-  `arcadedb-client` can be configured before the package exists on the index, and the first publish
+  `arcadedb-driver` can be configured before the package exists on the index, and the first publish
   needs no stored secret at all. See the workflow file's comments for the caveat that does carry
   over from npm (check the workflow filename in PyPI's publisher settings against this file's
   actual name whenever either changes).

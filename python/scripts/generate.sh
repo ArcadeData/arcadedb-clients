@@ -17,7 +17,7 @@ PYTHON_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$PYTHON_DIR/.." && pwd)"
 
 SPEC="$("$REPO_ROOT/scripts/resolve-openapi-contract.sh")"
-OUT="$PYTHON_DIR/packages/client/src/arcadedb_client/_generated"
+OUT="$PYTHON_DIR/packages/driver/src/arcadedb_driver/_generated"
 
 cd "$PYTHON_DIR"
 uv run openapi-python-client generate \

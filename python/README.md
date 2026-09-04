@@ -3,8 +3,8 @@
 Python clients for [ArcadeDB](https://arcadedb.com), generated from the contracts in
 `../contracts/`.
 
-- `packages/client` - `arcadedb-client`, the HTTP client. See
-  [`packages/client/README.md`](packages/client/README.md) for installation, usage, and the
+- `packages/driver` - `arcadedb-driver`, the HTTP client. See
+  [`packages/driver/README.md`](packages/driver/README.md) for installation, usage, and the
   contract defects it works around.
 
 Developing in this directory (commands, code generation, facade layout, deliberate asymmetries

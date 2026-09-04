@@ -3,11 +3,11 @@ import { GenericContainer, Wait } from "testcontainers";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { MessageInitShape, MessageShape } from "@bufbuild/protobuf";
-import { basicAuth, createClient as createHttpClient } from "../packages/client/src/index.js";
-import type { ArcadeDBServer } from "../packages/client/src/index.js";
-import { unwrap } from "../packages/client/src/internal/unwrap.js";
-import { bearerAuth, createClient as createGrpcClient, passwordAuth } from "../packages/client-grpc/src/index.js";
-import type { ArcadeDBGrpcClient, GrpcRecordSchema, GrpcValueSchema, InsertSummarySchema, Interceptor, QueryResultSchema } from "../packages/client-grpc/src/index.js";
+import { basicAuth, createClient as createHttpClient } from "../packages/driver/src/index.js";
+import type { ArcadeDBServer } from "../packages/driver/src/index.js";
+import { unwrap } from "../packages/driver/src/internal/unwrap.js";
+import { bearerAuth, createClient as createGrpcClient, passwordAuth } from "../packages/driver-grpc/src/index.js";
+import type { ArcadeDBGrpcClient, GrpcRecordSchema, GrpcValueSchema, InsertSummarySchema, Interceptor, QueryResultSchema } from "../packages/driver-grpc/src/index.js";
 
 // Image pin: kept independent of `e2e/data-plane.test.ts`'s pin. That file's 26.8.1 pin is
 // justified by a REST-contract-specific fact (a documentation-only OpenAPI bump); nothing here

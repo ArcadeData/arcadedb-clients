@@ -18,10 +18,10 @@ if the checked-in generated code and a fresh regeneration disagree.
 - `contracts/` - the OpenAPI and Protobuf contracts, fetched by `scripts/fetch-contract.sh` and
   committed.
 - `typescript/` - two TypeScript/JavaScript clients, sharing one toolchain and one CI job:
-  - `@arcadedb/client`, the HTTP client. See `typescript/packages/client/README.md` for usage.
-  - `@arcadedb/client-grpc`, the gRPC client. See `typescript/packages/client-grpc/README.md` for
+  - `@arcadedb/driver`, the HTTP client. See `typescript/packages/driver/README.md` for usage.
+  - `@arcadedb/driver-grpc`, the gRPC client. See `typescript/packages/driver-grpc/README.md` for
     usage, including why it has no browser build.
-- `python/` - `arcadedb-client`, the HTTP client. See `python/packages/client/README.md` for
+- `python/` - `arcadedb-driver`, the HTTP client. See `python/packages/driver/README.md` for
   usage.
 - `scripts/fetch-contract.sh` - fetches the OpenAPI contract from a released ArcadeDB version or a
   running Docker image, or copies the Protobuf contract out of a local `arcadedb` checkout, and

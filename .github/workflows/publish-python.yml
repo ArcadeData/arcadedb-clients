@@ -1,14 +1,14 @@
-name: Publish arcadedb-client (PyPI)
+name: Publish arcadedb-driver (PyPI)
 
 # Manual release only. Nothing in this repository publishes to PyPI on push, tag, or
 # schedule - a human triggers this from the Actions UI (or `gh workflow run
-# publish-python.yml`) after bumping python/packages/client/pyproject.toml's
+# publish-python.yml`) after bumping python/packages/driver/pyproject.toml's
 # "version". This workflow is the ONLY place that talks to PyPI.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version being published. Must equal packages/client/pyproject.toml "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
+        description: 'Version being published. Must equal packages/driver/pyproject.toml "version" exactly - this is a guardrail against dispatching the wrong release, not a bump mechanism.'
         required: true
         type: string
 
@@ -47,12 +47,12 @@ jobs:
         run: |
           uv run python - <<'PY'
           import os, sys, tomllib, pathlib
-          pkg = tomllib.loads(pathlib.Path("packages/client/pyproject.toml").read_text())
+          pkg = tomllib.loads(pathlib.Path("packages/driver/pyproject.toml").read_text())
           actual = pkg["project"]["version"]
           requested = os.environ["REQUESTED_VERSION"]
           if actual != requested:
               sys.exit(
-                  f'Dispatch input "{requested}" does not match packages/client/pyproject.toml '
+                  f'Dispatch input "{requested}" does not match packages/driver/pyproject.toml '
                   f'version "{actual}". Bump the package version first, or dispatch with the correct version.'
               )
           print(f"OK: dispatch input matches pyproject.toml version {actual}")
@@ -78,7 +78,7 @@ jobs:
           candidates = sorted(contracts.glob("arcadedb-openapi-*.json"))
           if len(candidates) != 1:
               sys.exit(f"Expected exactly one contracts/arcadedb-openapi-*.json, found {len(candidates)}")
-          pkg = tomllib.loads(pathlib.Path("packages/client/pyproject.toml").read_text())
+          pkg = tomllib.loads(pathlib.Path("packages/driver/pyproject.toml").read_text())
           pkg_version = pkg.get("tool", {}).get("arcadedb", {}).get("server-version")
           contract_version = json.loads(candidates[0].read_text()).get("info", {}).get("version")
           if not pkg_version or not contract_version:
@@ -97,27 +97,27 @@ jobs:
         # typing marker turns a silent no-op build into a hard CI failure instead of
         # an empty published package - the same guard publish.yml applies to dist/.
         run: |
-          uv build --package arcadedb-client --out-dir dist
-          WHEEL="$(ls dist/arcadedb_client-*.whl)"
+          uv build --package arcadedb-driver --out-dir dist
+          WHEEL="$(ls dist/arcadedb_driver-*.whl)"
           for entry in \
-            "arcadedb_client/__init__.py" \
-            "arcadedb_client/py.typed" \
-            "arcadedb_client/_generated/client.py" \
-            "arcadedb_client/_generated/api/query/execute_query_post.py"; do
+            "arcadedb_driver/__init__.py" \
+            "arcadedb_driver/py.typed" \
+            "arcadedb_driver/_generated/client.py" \
+            "arcadedb_driver/_generated/api/query/execute_query_post.py"; do
             unzip -l "$WHEEL" | grep -q "$entry" \
               || { echo "$entry is missing from $WHEEL - the published package would be broken" >&2; exit 1; }
           done
-          ls dist/arcadedb_client-*.tar.gz >/dev/null
+          ls dist/arcadedb_driver-*.tar.gz >/dev/null
 
       # Two caveats recorded here, mirroring the ones publish.yml (npm) records at its
       # own publish step - one INVERTS, one carries over unchanged:
       #
       # 1. This INVERTS npm's bootstrap problem. npm's trusted-publisher configuration
-      #    attaches to an EXISTING package, so the first publish of @arcadedb/client may
+      #    attaches to an EXISTING package, so the first publish of @arcadedb/driver may
       #    need a short-lived token before a trusted publisher can even be configured.
       #    PyPI instead supports PENDING publishers: a trusted publisher for this
       #    project can be configured on PyPI before the project exists there at all.
-      #    So the first publish of arcadedb-client needs no bootstrap token and no
+      #    So the first publish of arcadedb-driver needs no bootstrap token and no
       #    stored secret, ever - every run, including the first, authenticates purely
       #    via the id-token permission above.
       #

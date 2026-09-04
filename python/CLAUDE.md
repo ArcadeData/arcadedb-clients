@@ -12,17 +12,17 @@ Run everything from `python/`.
 ```bash
 uv sync                    # install (Python >= 3.10; uv resolves and creates .venv)
 ./scripts/generate.sh      # regenerate the HTTP client from contracts/
-uv run mypy                # strict type-check (packages/client/src, packages/client/tests, e2e)
+uv run mypy                # strict type-check (packages/driver/src, packages/driver/tests, e2e)
 uv run ruff check .        # lint
 uv run ruff format --check .   # formatting check (use `ruff format .` without --check to fix)
 uv run pytest              # unit tests only, offline, no Docker
 uv run pytest e2e          # end-to-end tests against a real ArcadeDB container (Docker required)
 
-uv run pytest packages/client/tests/test_data.py -v   # a single test file
+uv run pytest packages/driver/tests/test_data.py -v   # a single test file
 uv run pytest -k "rolls_back"                          # a single test by name (substring of the function name)
 ```
 
-`pyproject.toml`'s `[tool.pytest.ini_options]` scopes `testpaths` to `packages/client/tests` and
+`pyproject.toml`'s `[tool.pytest.ini_options]` scopes `testpaths` to `packages/driver/tests` and
 excludes `e2e/`, the same split `typescript/vitest.config.ts` makes, so `uv run pytest` never
 starts a container. `-k` matches against the *test function name*, not a literal string with
 spaces the way it might read - `-k "rolls back"` (space) does not filter to
@@ -30,16 +30,16 @@ spaces the way it might read - `-k "rolls back"` (space) does not filter to
 names use underscores, so match on those.
 
 The workspace root (`python/pyproject.toml`, `[tool.uv] package = false`) is not published; only
-`packages/client` is a real package. `uv sync` from `python/` installs both the dev tooling and
-`packages/client` in editable mode via `[tool.uv.workspace]` / `[tool.uv.sources]`.
+`packages/driver` is a real package. `uv sync` from `python/` installs both the dev tooling and
+`packages/driver` in editable mode via `[tool.uv.workspace]` / `[tool.uv.sources]`.
 
 ## Generation
 
 `scripts/generate.sh` runs `openapi-python-client generate --meta none` against the contract
 located by `../scripts/resolve-openapi-contract.sh`, writing into
-`packages/client/src/arcadedb_client/_generated`. `--meta none` emits only the package body (no
+`packages/driver/src/arcadedb_driver/_generated`. `--meta none` emits only the package body (no
 project scaffolding of its own); the generated modules import each other relatively, which is what
-lets the tree nest inside `arcadedb_client` without rewriting a single import. **`_generated/` is
+lets the tree nest inside `arcadedb_driver` without rewriting a single import. **`_generated/` is
 never hand-edited** - CI's drift gate regenerates from the committed contract and fails the build
 if the result differs from what is checked in, the same rule the root `CLAUDE.md` states for the
 whole repository.
@@ -85,7 +85,7 @@ step and a second thing that can drift, to remove duplication that mypy already 
   `from_dict` can still raise out of the parser on a 200 response that does not match its declared
   shape - see "Two contract defects this milestone uncovered" below for a real one
   (`POST /api/v1/server`). This mirrors
-  `@arcadedb/client`'s `raw`/facade split (`{ data, error }` vs. throwing). Do not blur it: a
+  `@arcadedb/driver`'s `raw`/facade split (`{ data, error }` vs. throwing). Do not blur it: a
   caller mixing assumptions about which surface they are calling is the most common way to end up
   with either an unhandled exception or a silently ignored error.
 - **`help_` matches the generated model.** `ArcadeDBError.help_` is spelled with a trailing
@@ -101,7 +101,7 @@ step and a second thing that can drift, to remove duplication that mypy already 
   deliberate, not a bug to quietly fix by changing the default: the generated `Client` itself
   defaults `_timeout` to `None` and passes it through the same way, so a facade-only default would
   make `ArcadeDBServer` and `.raw` disagree against the same server, and it preserves parity with
-  `@arcadedb/client`, where `fetch` has no default timeout either. Pass an `httpx.Timeout` to
+  `@arcadedb/driver`, where `fetch` has no default timeout either. Pass an `httpx.Timeout` to
   bound requests.
 - **`auth.py` is three lines where `auth.ts` is sixty; do not port the workaround.** `auth.ts`
   spends most of its length working around `btoa`: it treats input as Latin-1 and throws on
@@ -162,7 +162,7 @@ decision, not a general policy to launder `Unset` out of every response this cli
 
 The generated `CommandRequest` model carries an optional `limit` field - the contract has it, the
 generator produced it - but `ArcadeDBDatabase.command()` deliberately does not expose it (see
-`build_command_request`'s docstring in `facade/data.py`). `@arcadedb/client`'s `command()` does not
+`build_command_request`'s docstring in `facade/data.py`). `@arcadedb/driver`'s `command()` does not
 expose it either. Keeping the two clients' public surfaces identical matters more than shipping one
 optional field early; adding it is additive and belongs in a change that does it for both clients
 at once, not one that gets ahead of the other.
@@ -173,9 +173,9 @@ Both of the following look like bugs in this client until you know the cause is 
 have a "do not fix this back" quality: fixing them by routing through the generated models would
 reintroduce the underlying defect's failure mode, just less visibly. Both are also the reason this
 package is worth having, in one sense: **this Python client is the first ArcadeDB client that
-validates responses at runtime.** `openapi-fetch`, which `@arcadedb/client` is built on, performs
+validates responses at runtime.** `openapi-fetch`, which `@arcadedb/driver` is built on, performs
 no runtime validation of its own - raw JSON passes straight through unexamined - so
-`@arcadedb/client` never noticed either defect below. `openapi-python-client` generates real
+`@arcadedb/driver` never noticed either defect below. `openapi-python-client` generates real
 `attrs` models with real `from_dict` parsing, so this client is the one that actually exercises the
 contract's declared shapes against the server's real responses, and found two places where they
 disagree.

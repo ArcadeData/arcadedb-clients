@@ -21,9 +21,9 @@ from pathlib import Path
 
 # Endpoints the generator cannot model, and what this repository does about each:
 #   POST /api/v1/ts/{database}/write       text/plain      hand-written in facade/timeseries.py
-#   POST /api/v1/batch/{database}          jsonl/ndjson/csv  unwrapped, as in @arcadedb/client
-#   POST /api/v1/ts/{database}/prom/read   x-protobuf      unwrapped, as in @arcadedb/client
-#   POST /api/v1/ts/{database}/prom/write  x-protobuf      unwrapped, as in @arcadedb/client
+#   POST /api/v1/batch/{database}          jsonl/ndjson/csv  unwrapped, as in @arcadedb/driver
+#   POST /api/v1/ts/{database}/prom/read   x-protobuf      unwrapped, as in @arcadedb/driver
+#   POST /api/v1/ts/{database}/prom/write  x-protobuf      unwrapped, as in @arcadedb/driver
 EXPECTED_SKIPS = frozenset(
     {
         "POST /api/v1/batch/{database}",
@@ -69,7 +69,7 @@ def main() -> int:
             "none",
             "--overwrite",
             "--output-path",
-            str(python_dir / "packages/client/src/arcadedb_client/_generated"),
+            str(python_dir / "packages/driver/src/arcadedb_driver/_generated"),
         ],
         cwd=python_dir,
         capture_output=True,
