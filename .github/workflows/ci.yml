@@ -1,4 +1,4 @@
-name: TypeScript client CI
+name: TypeScript driver CI
 
 on:
   push:
